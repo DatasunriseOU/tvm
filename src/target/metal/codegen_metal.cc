@@ -353,6 +353,30 @@ void CodeGenMetal::VisitStmt_(const AllocBufferNode* op) {
   }
 }
 
+void CodeGenMetal::VisitStmt_(const AttrStmtNode* op) {
+  if (op->attr_key == "pragma_unroll_factor") {
+    const auto* factor = op->value.as<IntImmNode>();
+    TVM_FFI_ICHECK(factor) << "pragma_unroll_factor expects an IntImm value";
+    const auto* loop_var = op->node.as<VarNode>();
+    TVM_FFI_ICHECK(loop_var) << "pragma_unroll_factor expects a loop var node";
+    unroll_factor_[loop_var] = Downcast<IntImm>(factor);
+  }
+  CodeGenC::VisitStmt_(op);
+}
+
+void CodeGenMetal::VisitStmt_(const ForNode* op) {
+  if (op->kind == ForKind::kUnrolled) {
+    PrintIndent();
+    auto it = unroll_factor_.find(op->loop_var.get());
+    if (it == unroll_factor_.end()) {
+      stream << "#pragma unroll\n";
+    } else {
+      stream << "#pragma unroll " << PrintExpr(it->second) << "\n";
+    }
+  }
+  CodeGenC::VisitStmt_(op);
+}
+
 void CodeGenMetal::VisitExpr_(const SelectNode* op, std::ostream& os) {  // NOLINT(*)
   os << "select(" << PrintExpr(op->false_value) << ", " << PrintExpr(op->true_value) << ", "
      << PrintExpr(op->condition) << ")";
