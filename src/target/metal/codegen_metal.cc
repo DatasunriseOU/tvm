@@ -374,7 +374,12 @@ void CodeGenMetal::VisitStmt_(const ForNode* op) {
   if (op->kind == ForKind::kUnrolled) {
     PrintIndent();
     auto it = unroll_factor_.find(op->loop_var.get());
-    if (it == unroll_factor_.end()) {
+    auto ann = op->annotations.find("pragma_unroll_factor");
+    if (ann != op->annotations.end()) {
+      const auto* factor = (*ann).second.as<IntImmNode>();
+      TVM_FFI_ICHECK(factor) << "pragma_unroll_factor expects an IntImm value";
+      stream << "#pragma unroll " << PrintExpr(ffi::GetRef<IntImm>(factor)) << "\n";
+    } else if (it == unroll_factor_.end()) {
       stream << "#pragma unroll\n";
     } else {
       stream << "#pragma unroll " << PrintExpr(it->second) << "\n";
