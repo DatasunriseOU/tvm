@@ -299,6 +299,15 @@ class CodeGenC : public ExprFunctor<void(const PrimExpr&, std::ostream&)>,
    * \param t The type to be checked.
    */
   void RegisterHandleType(const VarNode* buf_var, DataType t);
+  /*!
+   * \brief Print a typed pointer declaration for handle vars when the value
+   * carries enough storage/dtype information.
+   *
+   * This covers handle temps produced by address_of(BufferLoad), which need a
+   * target-specific address-space-qualified pointer type on Metal.
+   */
+  bool TryPrintTypedHandleDecl(const VarNode* var, const PrimExpr& value,
+                               const std::string& value_str, std::ostream& os);
   // override
   void PrintSSAAssign(const std::string& target, const std::string& src, DataType t) override;
   /*! \brief reserves common C keywords */

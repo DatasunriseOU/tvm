@@ -653,23 +653,67 @@ class IRSubstitute : public StmtExprMutator {
     return var;
   }
 
+  PrimExpr VisitExpr_(const BufferLoadNode* op) final {
+    auto node = Downcast<BufferLoad>(StmtExprMutator::VisitExpr_(op));
+    return VisitBufferAccess(std::move(node));
+  }
+
+  Stmt VisitStmt_(const BufferStoreNode* op) final {
+    auto node = Downcast<BufferStore>(StmtExprMutator::VisitStmt_(op));
+    return VisitBufferAccess(std::move(node));
+  }
+
+  Stmt VisitStmt_(const DeclBufferNode* op) final {
+    auto node = Downcast<DeclBuffer>(StmtExprMutator::VisitStmt_(op));
+    return VisitBufferAccess(std::move(node));
+  }
+
   // Override VisitBufferDef to also remap buffer->data (the backing allocation var).
   // The base class only visits shape/strides/elem_offset.
   Buffer VisitBufferDef(const Buffer& buffer, bool alloc_data) final {
-    Buffer new_buf = StmtExprMutator::VisitBufferDef(buffer, alloc_data);
-    // Additionally handle data var substitution (base does not visit data).
-    PrimExpr new_data_expr = VisitExpr(new_buf->data);
+    return GetRemappedBuffer(StmtExprMutator::VisitBufferDef(buffer, alloc_data));
+  }
+
+  template <typename Node>
+  Node VisitBufferAccess(Node node) {
+    Buffer new_buf = GetRemappedBuffer(node->buffer);
+    if (!new_buf.same_as(node->buffer)) {
+      auto* writer = node.CopyOnWrite();
+      writer->buffer = new_buf;
+    }
+    return node;
+  }
+
+  Buffer GetRemappedBuffer(Buffer buf) {
+    auto it = buffer_remap_.find(buf);
+    if (it != buffer_remap_.end()) {
+      return (*it).second;
+    }
+
+    PrimExpr new_data_expr = VisitExpr(buf->data);
     TVM_FFI_ICHECK(new_data_expr->IsInstance<VarNode>())
-        << "Buffer " << new_buf << " uses backing allocation " << new_buf->data
+        << "Buffer " << buf << " uses backing allocation " << buf->data
         << ", which was substituted into the expression " << new_data_expr
         << " and the backing allocation must be a tirx::Var";
+
     Var data = Downcast<Var>(new_data_expr);
-    if (!data.same_as(new_buf->data)) {
-      auto* n = new_buf.CopyOnWrite();
+    PrimExpr elem_offset = VisitExpr(buf->elem_offset);
+    ffi::Array<PrimExpr> shape =
+        buf->shape.Map([this](const PrimExpr& expr) { return VisitExpr(expr); });
+    ffi::Array<PrimExpr> strides =
+        buf->strides.Map([this](const PrimExpr& expr) { return VisitExpr(expr); });
+
+    if (!data.same_as(buf->data) || !elem_offset.same_as(buf->elem_offset) ||
+        !shape.same_as(buf->shape) || !strides.same_as(buf->strides)) {
+      auto* n = buf.CopyOnWrite();
       n->data = std::move(data);
-      buffer_remap_.Set(buffer, new_buf);
+      n->elem_offset = std::move(elem_offset);
+      n->shape = std::move(shape);
+      n->strides = std::move(strides);
     }
-    return new_buf;
+
+    buffer_remap_.Set(buf, buf);
+    return buf;
   }
 
   Stmt VisitStmt_(const AttrStmtNode* op) final {
@@ -687,6 +731,7 @@ class IRSubstitute : public StmtExprMutator {
  private:
   // Caller provided function that defines the variables to be remapped.
   std::function<ffi::Optional<PrimExpr>(const Var&)> vmap_;
+  ffi::Map<Buffer, Buffer> buffer_remap_;
 };
 
 Stmt Substitute(Stmt stmt, std::function<ffi::Optional<PrimExpr>(const Var&)> vmap) {

@@ -57,17 +57,11 @@ class HostDeviceSplitter : public StmtMutator {
       VarUseDefAnalyzer use_def(/*defined_vars=*/{}, /*visit_thread_extent=*/true);
       use_def(body);
 
-      // Sort first by variable type, then by variable name
+      // Keep the launch ABI stable.  The host-side call produced below uses
+      // this same order, and LowerDeviceKernelLaunch maps params to args by
+      // position.  Sorting by name reorders Metal buffer(i) slots relative to
+      // TileLang's runtime argument order.
       std::vector<Var> params{use_def.undefined_.begin(), use_def.undefined_.end()};
-      std::sort(params.begin(), params.end(), [](const Var& a, const Var& b) {
-        auto sort_key = [](const Var& var) {
-          return std::tuple{
-              !var->dtype.is_handle(),
-              var->name_hint,
-          };
-        };
-        return sort_key(a) < sort_key(b);
-      });
       return {params, use_def.undefined_buffers_};
     }();
 

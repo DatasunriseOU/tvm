@@ -389,6 +389,57 @@ void CodeGenC::RegisterHandleType(const VarNode* buf_var, DataType t) {
   }
 }
 
+bool CodeGenC::TryPrintTypedHandleDecl(const VarNode* var, const PrimExpr& value,
+                                       const std::string& value_str, std::ostream& os) {
+  if (var->dtype != DataType::Handle()) {
+    return false;
+  }
+
+  DataType dtype;
+  bool has_dtype = false;
+  std::string storage_scope;
+  if (auto it = handle_data_type_.find(var); it != handle_data_type_.end()) {
+    dtype = it->second;
+    has_dtype = true;
+  }
+
+  const CallNode* call = value.as<CallNode>();
+  if (call != nullptr && call->op.same_as(builtin::address_of()) && call->args.size() == 1) {
+    if (const BufferLoadNode* load = call->args[0].as<BufferLoadNode>()) {
+      dtype = load->buffer->dtype;
+      has_dtype = true;
+      auto scope_it = alloc_storage_scope_.find(load->buffer->data.get());
+      if (scope_it != alloc_storage_scope_.end()) {
+        storage_scope = scope_it->second;
+      }
+    }
+  }
+
+  if (!has_dtype) {
+    return false;
+  }
+
+  if (storage_scope.empty()) {
+    auto scope_it = alloc_storage_scope_.find(var);
+    if (scope_it != alloc_storage_scope_.end()) {
+      storage_scope = scope_it->second;
+    }
+  }
+
+  PrintIndent();
+  if (!storage_scope.empty() && IsScopePartOfType()) {
+    PrintStorageScope(storage_scope, os);
+  }
+  PrintType(dtype, os);
+  os << "* " << AllocVarID(var) << " = (";
+  if (!storage_scope.empty() && IsScopePartOfType()) {
+    PrintStorageScope(storage_scope, os);
+  }
+  PrintType(dtype, os);
+  os << "*)" << value_str << ";\n";
+  return true;
+}
+
 void CodeGenC::PrintVecElemLoad(const std::string& vec, DataType t, int i,
                                 std::ostream& os) {  // NOLINT(*)
   os << vec << ".s" << std::hex << i << std::dec;
@@ -914,13 +965,8 @@ void CodeGenC::VisitExpr_(const LetNode* op, std::ostream& os) {  // NOLINT(*)
     TVM_FFI_ICHECK(!var_idmap_.count(op->var.get()));
     var_idmap_[op->var.get()] = value;
   } else {
-    PrintIndent();
-    if (op->var.dtype() == DataType::Handle() && handle_data_type_.count(op->var.get())) {
-      PrintType(handle_data_type_.at(op->var.get()), this->stream);
-      this->stream << "* " << AllocVarID(op->var.get()) << " = (";
-      PrintType(handle_data_type_.at(op->var.get()), this->stream);
-      this->stream << "*)" << value << ";\n";
-    } else {
+    if (!TryPrintTypedHandleDecl(op->var.get(), op->value, value, this->stream)) {
+      PrintIndent();
       PrintType(op->var.dtype(), this->stream);
       this->stream << ' ' << AllocVarID(op->var.get()) << " = " << value << ";\n";
     }
@@ -1038,13 +1084,8 @@ void CodeGenC::VisitStmt_(const BindNode* op) {
     TVM_FFI_ICHECK(!var_idmap_.count(op->var.get()));
     var_idmap_[op->var.get()] = value;
   } else {
-    PrintIndent();
-    if (op->var.dtype() == DataType::Handle() && handle_data_type_.count(op->var.get())) {
-      PrintType(handle_data_type_.at(op->var.get()), stream);
-      stream << "* " << AllocVarID(op->var.get()) << " = (";
-      PrintType(handle_data_type_.at(op->var.get()), stream);
-      stream << "*)" << value << ";\n";
-    } else {
+    if (!TryPrintTypedHandleDecl(op->var.get(), op->value, value, this->stream)) {
+      PrintIndent();
       PrintType(op->var.dtype(), this->stream);
       this->stream << ' ' << AllocVarID(op->var.get()) << " = " << value << ";\n";
     }
