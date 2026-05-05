@@ -1246,7 +1246,16 @@ void CodeGenC::VisitStmt_(const EvaluateNode* op) {
       TVM_FFI_ICHECK_EQ(call->args.size(), 4);
       int kind = call->args[2].as<IntImmNode>()->value;
       DataType store_dtype = call->args[3].dtype();
-      std::string ref = GetStructRef(store_dtype, call->args[0], call->args[1], kind);
+      std::string ref = [&]() {
+        if (kind == builtin::kTVMFFIAnyUnionValue && call->args[3].as<StringImmNode>()) {
+          std::ostringstream os;
+          os << "(((TVMFFIAny*)";
+          this->PrintExpr(call->args[0], os);
+          os << ")[" << call->args[1] << "].v_c_str)";
+          return os.str();
+        }
+        return GetStructRef(store_dtype, call->args[0], call->args[1], kind);
+      }();
       std::string value = PrintExpr(call->args[3]);
       std::string cast;
 
