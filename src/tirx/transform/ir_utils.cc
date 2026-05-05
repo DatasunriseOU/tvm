@@ -26,6 +26,7 @@
 #include <tvm/arith/analyzer.h>
 #include <tvm/arith/int_solver.h>
 #include <tvm/ffi/cast.h>
+#include <tvm/ffi/reflection/accessor.h>
 #include <tvm/ffi/reflection/registry.h>
 #include <tvm/ir/scope_stack.h>
 #include <tvm/s_tir/stmt.h>
@@ -71,8 +72,26 @@ Stmt MergeNest(const std::vector<Stmt>& nest, Stmt body) {
       body = SeqStmt({s, body});
     } else if (s.as<AllocBufferNode>() || s.as<DeclBufferNode>()) {
       body = SeqStmt::Flatten(s, body);
+    } else if (s->GetTypeKey() == "tilelang.LetStmt") {
+      // CPPMEGA: drift A — TileLang vendored `tilelang.LetStmt` (3-arg form,
+      // pre-tirx) reaches MergeNest from `tl.MakePackedAPI` and friends,
+      // which emit it directly into init_nest. apache/tvm's tirx pipeline
+      // does not know this node type. Lower it to the tirx-equivalent
+      // SeqStmt({Bind(var, value), accumulated_body}) inline, mirroring the
+      // semantics of the legacy LetStmtNode case (set body, recurse outward).
+      // This keeps MergeNest header-only with respect to tilelang vendored
+      // types — no cross-tree include needed.
+      static const ffi::reflection::FieldGetter get_var("tilelang.LetStmt", "var");
+      static const ffi::reflection::FieldGetter get_value("tilelang.LetStmt", "value");
+      static const ffi::reflection::FieldGetter get_body("tilelang.LetStmt", "body");
+      Var var = get_var(s).cast<Var>();
+      PrimExpr value = get_value(s).cast<PrimExpr>();
+      Stmt orig_body = get_body(s).cast<Stmt>();
+      TVM_FFI_ICHECK(is_no_op(orig_body))
+          << "MergeNest expects placeholder no-op body in tilelang.LetStmt, got: " << orig_body;
+      body = SeqStmt::Flatten(Bind(var, value), body);
     } else {
-      TVM_FFI_THROW(InternalError) << "not supported nest type";
+      TVM_FFI_THROW(InternalError) << "not supported nest type: type_key=" << s->GetTypeKey();
     }
   }
   return body;

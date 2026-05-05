@@ -535,3 +535,56 @@ def Filter(fcond: Callable):
         The result pass
     """
     return _ffi_api.Filter(fcond)  # type: ignore
+
+
+# CPPMEGA: apache/tvm latest moved RenormalizeSplitPattern from tir into the
+# new s_tir namespace (tvm.s_tir.transform.RenormalizeSplitPattern).  TileLang
+# still calls ``tvm.tir.transform.RenormalizeSplitPattern()`` from
+# ``tilelang/engine/phase.py``.  Forward to the s_tir implementation; PrimFunc
+# / IRModule types are shared with tirx, so the pass applies cleanly.
+def RenormalizeSplitPattern():
+    """Renormalize the split pattern from floordiv(floormod()) to floormod(floordiv())
+
+    Returns
+    -------
+    fpass : tvm.transform.Pass
+        The result pass
+    """
+    from tvm.s_tir.transform import RenormalizeSplitPattern as _s_tir_impl
+    return _s_tir_impl()
+
+
+# CPPMEGA: apache/tvm latest moved HoistIfThenElse from tir into the new s_tir
+# namespace (tvm.s_tir.transform.HoistIfThenElse).  TileLang still calls
+# ``tvm.tir.transform.HoistIfThenElse()`` from ``tilelang/engine/phase.py``.
+# Forward to the s_tir implementation; PrimFunc / IRModule types are shared
+# with tirx, so the pass applies cleanly.
+def HoistIfThenElse(variant=None):
+    """Hoist loop-invariant IfThenElse nodes to outside the eligible loops.
+
+    Parameters
+    ----------
+    variant : Optional[String]
+        The variant of the pass. Can be "basic" or None (default).
+
+    Returns
+    -------
+    fpass : tvm.transform.Pass
+        The result pass
+    """
+    from tvm.s_tir.transform import HoistIfThenElse as _s_tir_impl
+    return _s_tir_impl(variant)
+
+
+# CPPMEGA: generic fallback for the ~30 other passes apache moved tir → s_tir
+# (Rule H from /tmp/migration_map.md). Avoids one-by-one shims for every renamed
+# pass. Triggered when TileLang imports `tvm.tirx.transform.X` (via the tir → tirx
+# compat shim) and X exists in s_tir but not in tirx.
+def __getattr__(name):
+    try:
+        import tvm.s_tir.transform as _s_tir_transform_mod
+    except ImportError:
+        raise AttributeError(f"module 'tvm.tirx.transform' has no attribute {name!r}")
+    if hasattr(_s_tir_transform_mod, name):
+        return getattr(_s_tir_transform_mod, name)
+    raise AttributeError(f"module 'tvm.tirx.transform' has no attribute {name!r}")

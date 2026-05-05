@@ -51,6 +51,10 @@ from . import script
 # tvm.tirx — registers itself via tvm.script.register_dialect in its __init__
 from . import tirx
 
+# CPPMEGA: tvm.tir compat shim — re-exports tvm.tirx and registers `tir`
+# as a script-dialect alias so legacy TileLang imports keep working.
+from . import tir  # noqa: F401
+
 # tvm.s_tir
 from . import s_tir
 

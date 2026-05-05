@@ -29,6 +29,7 @@
 #include <tvm/ir/expr.h>
 #include <tvm/ir/with_context.h>
 
+#include <functional>  // CPPMEGA: for Analyzer::EnterConstraint shim
 #include <limits>
 #include <memory>
 #include <unordered_map>
@@ -704,6 +705,10 @@ class TVM_DLL Analyzer {
    *        between variables.
    */
   void Bind(const ffi::Map<Var, Range>& variables, bool allow_override = false);
+  // CPPMEGA: restored public Analyzer::EnterConstraint (apache replaced with
+  // RAII With<ConstraintContext>; TileLang's constr_visitor.h still needs the
+  // function-cleanup form). Aggregates sub-analyzer EnterConstraint calls.
+  std::function<void()> EnterConstraint(const PrimExpr& constraint);
   /*!
    * \brief Whether can we prove expr >= val.
 

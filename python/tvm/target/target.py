@@ -230,3 +230,44 @@ class Target(Object):
         if target is None:
             raise ValueError("Target is not set in env or passed as argument.")
         return target
+
+    @staticmethod
+    def canon_target(target):
+        """CPPMEGA shim: legacy ``Target.canon_target`` removed by apache/tvm.
+
+        Coerces ``target`` (None / str / dict / Target) into a canonical
+        ``Target`` instance, mirroring the legacy behaviour relied upon by
+        TileLang's lowering pipeline (``tilelang/engine/lower.py:310``).
+        Returns ``None`` if input is ``None`` (legacy semantics for the host
+        slot when no host is needed).
+        """
+        if target is None:
+            return None
+        if isinstance(target, Target):
+            return target
+        return Target(target)
+
+    @staticmethod
+    def canon_target_and_host(target, target_host=None):
+        """CPPMEGA shim: legacy ``Target.canon_target_and_host`` removed."""
+        target = Target.canon_target(target)
+        target_host = Target.canon_target(target_host)
+        if target is not None and target_host is not None and target.host is None:
+            target = Target(target, target_host)
+        return target, target_host
+
+    @staticmethod
+    def canon_multi_target(target):
+        """CPPMEGA shim: legacy ``Target.canon_multi_target`` removed."""
+        if target is None:
+            return None
+        if isinstance(target, (list, tuple)):
+            return [Target.canon_target(t) for t in target]
+        return [Target.canon_target(target)]
+
+    @staticmethod
+    def canon_multi_target_and_host(target, target_host=None):
+        """CPPMEGA shim: legacy ``Target.canon_multi_target_and_host`` removed."""
+        targets = Target.canon_multi_target(target)
+        target_host = Target.canon_target(target_host)
+        return targets, target_host

@@ -124,6 +124,23 @@ void Analyzer::Bind(const ffi::Map<Var, Range>& variables, bool allow_override) 
   }
 }
 
+// CPPMEGA: TileLang compatibility — public Analyzer::EnterConstraint shim.
+// Mirrors ConstraintContext::EnterWithScope below; returns a single recovery
+// closure that calls each sub-analyzer's recovery in reverse order.
+std::function<void()> Analyzer::EnterConstraint(const PrimExpr& constraint) {
+  std::vector<std::function<void()>> recovery;
+  recovery.push_back(this->const_int_bound.EnterConstraint(constraint));
+  recovery.push_back(this->modular_set.EnterConstraint(constraint));
+  recovery.push_back(this->rewrite_simplify.EnterConstraint(constraint));
+  recovery.push_back(this->int_set.EnterConstraint(constraint));
+  recovery.push_back(this->transitive_comparisons.EnterConstraint(constraint));
+  return [recovery = std::move(recovery)]() {
+    for (auto it = recovery.rbegin(); it != recovery.rend(); ++it) {
+      if (*it) (*it)();
+    }
+  };
+}
+
 void ConstraintContext::EnterWithScope() {
   TVM_FFI_ICHECK(recovery_functions_.size() == 0);
   // entering the scope.

@@ -303,10 +303,16 @@ void CodeGenMetal::PrintVecElemStore(const std::string& vec, DataType t, int i,
 void CodeGenMetal::PrintStorageScope(const std::string& scope, std::ostream& os) {  // NOLINT(*)
   if (scope == "global") {
     os << "device ";
-  } else if (scope == "shared") {
+  } else if (scope == "shared" || scope == "shared.dyn") {
+    // CPPMEGA: accept "shared.dyn" tag (TileLang dynamic shared memory variant)
     os << "threadgroup ";
   } else if (scope == "local") {
     os << "thread ";
+  } else if (scope == "metal.simdgroup") {
+    // CPPMEGA: TileLang-specific scope for Apple Silicon simdgroup matrices.
+    // The actual `simdgroup_<dtype>8x8 vid[N];` declaration is emitted by
+    // VisitStmt_(AllocBufferNode) above; PrintStorageScope is a no-op here so
+    // any incidental call (e.g. function param with this scope) does not abort.
   } else {
     TVM_FFI_THROW(InternalError) << "Unknown storage scope `" << scope << "`";
   }

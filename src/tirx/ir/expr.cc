@@ -604,6 +604,22 @@ Call::Call(DataType dtype, RelaxExpr op, ffi::Array<PrimExpr> args, Span span) {
   data_ = std::move(node);
 }
 
+// CPPMEGA: TileLang fork extension — Call constructor with explicit annotations.
+Call::Call(DataType dtype, RelaxExpr op, ffi::Array<PrimExpr> args,
+           ffi::Map<ffi::String, ffi::ObjectRef> annotations, Span span) {
+  for (size_t i = 0; i < args.size(); ++i) {
+    TVM_FFI_ICHECK(args[i].defined()) << "arg " << i << " is not defined()";
+  }
+
+  ffi::ObjectPtr<CallNode> node = ffi::make_object<CallNode>();
+  node->dtype = dtype;
+  node->op = std::move(op);
+  node->args = std::move(args);
+  node->annotations = std::move(annotations);
+  node->span = std::move(span);
+  data_ = std::move(node);
+}
+
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
   refl::GlobalDef().def(

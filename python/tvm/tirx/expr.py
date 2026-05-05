@@ -1305,6 +1305,15 @@ class Call(PrimExprWithOp):
         self, dtype: str, op: Op | str, args: list[PrimExpr], span: Span | None = None
     ) -> None:
         if isinstance(op, str):
+            # CPPMEGA: rewrite legacy ``tir.*`` intrinsic names to the new
+            # ``tirx.*`` namespace so TileLang call sites that still pass
+            # ``tir.tvm_storage_sync`` / ``tir.if_then_else`` / etc. keep
+            # working without touching every TileLang import site. The shim
+            # at python/tvm/tir/__init__.py applies the same rewrite to
+            # ``Op.get``; this entry point bypasses ``Op.get``, so apply it
+            # here too.
+            if op.startswith("tir.") and not op.startswith("tirx."):
+                op = "tirx." + op[len("tir.") :]
             if not op.startswith("tirx."):
                 raise ValueError(
                     (
