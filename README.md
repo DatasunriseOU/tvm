@@ -28,6 +28,59 @@ following the following principles:
 - Python-first development that enables quick customization of machine learning compiler pipelines.
 - Universal deployment to bring models into minimum deployable modules.
 
+CPPMEGA Local Patches (branch `tilelang-apache-tvm-migration`)
+--------------------------------------------------------------
+
+This fork at `apstenku123/tvm` carries narrow local patches that the
+TileLang fork at `DatasunriseOU/tilelang` (branch `metal-gemm-upstream-rebase`)
+depends on. All patches are marked `// CPPMEGA:` in the source so they can be
+greppen, audited, and removed once upstream covers the same surface.
+
+Current patch set:
+
+1. **Restored `Analyzer::EnterConstraint` shim**
+   (`include/tvm/arith/analyzer.h`, `src/arith/analyzer.cc`).  Apache TVM
+   replaced the public `Analyzer::EnterConstraint(PrimExpr) -> std::function<void()>`
+   API with the RAII `With<ConstraintContext>` form. TileLang's
+   `src/transform/common/constr_visitor.h::Populate` still relies on the
+   function-cleanup form, so we expose a thin shim that aggregates the
+   five sub-analyzer `EnterConstraint` calls and returns a single recovery
+   closure executed in reverse order.
+
+2. **Bind / EnterConstraint hook table on `Analyzer`** (commit
+   `601f8fec50`).  External sub-analyzers (the TileLang vendored
+   `Z3Prover` for partial-sync proofs) need to observe every
+   `Analyzer::Bind(var, expr)`, `Analyzer::Bind(var, range)`, and every
+   constraint pushed by `ConstraintContext::EnterWithScope`.  In the
+   classic TileLang+TVM fork, `Analyzer` carried a `z3_prover` member and
+   forwarded these calls inline.  Apache TVM does not, and we are not
+   allowed to add a hard dependency from `libtvm_compiler` to
+   `libtilelang`.  The patch introduces a callback hook table:
+
+       using BindExprHook = void(*)(Analyzer*, const Var&, const PrimExpr&, bool);
+       using BindRangeHook = void(*)(Analyzer*, const Var&, const Range&, bool);
+       using EnterConstraintHook = std::function<void()>(*)(Analyzer*, const PrimExpr&);
+       static void RegisterBindExprHook(BindExprHook);
+       static void RegisterBindRangeHook(BindRangeHook);
+       static void RegisterEnterConstraintHook(EnterConstraintHook);
+
+   `Analyzer::Bind(var, expr, ...)` and `Analyzer::Bind(var, range, ...)`
+   call their hook (if registered) at the end of the body.
+   `ConstraintContext::EnterWithScope` and the public
+   `Analyzer::EnterConstraint` shim push the hook's recovery closure
+   onto their `recovery_functions_` stack so the constraint is unwound
+   in the right order.
+
+   Default hook value is `nullptr`, so a build that does not link
+   libtilelang behaves identically to upstream Apache TVM (the hook
+   call sites collapse to a single null-pointer test under `-O2`).
+
+   `libtilelang.dylib` registers the three hooks at static init via the
+   `Z3HookRegistrar` in `src/transform/vendored/z3_prover.cc`.  Each hook
+   forwards to the per-Analyzer cached `tilelang::tlz3::Z3Prover`
+   instance, restoring the constraint-aware partial-sync semantics from
+   stack-c / tl_pr_c.
+
 License
 -------
 TVM is licensed under the [Apache-2.0](LICENSE) license.
