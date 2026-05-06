@@ -42,6 +42,19 @@ Analyzer::Analyzer()
       canonical_simplify(this),
       int_set(this) {}
 
+// CPPMEGA: hook table for external sub-analyzers (TileLang Z3Prover).
+namespace {
+Analyzer::BindExprHook g_bind_expr_hook = nullptr;
+Analyzer::BindRangeHook g_bind_range_hook = nullptr;
+Analyzer::EnterConstraintHook g_enter_constraint_hook = nullptr;
+}  // namespace
+
+void Analyzer::RegisterBindExprHook(BindExprHook hook) { g_bind_expr_hook = hook; }
+void Analyzer::RegisterBindRangeHook(BindRangeHook hook) { g_bind_range_hook = hook; }
+void Analyzer::RegisterEnterConstraintHook(EnterConstraintHook hook) {
+  g_enter_constraint_hook = hook;
+}
+
 void Analyzer::Bind(const Var& var, const PrimExpr& expr, bool allow_override) {
   PrimExpr new_expr = expr;
   new_expr = this->canonical_simplify(new_expr);
@@ -53,6 +66,9 @@ void Analyzer::Bind(const Var& var, const PrimExpr& expr, bool allow_override) {
   this->canonical_simplify.Update(var, new_expr, allow_override);
   this->int_set.Update(var, this->int_set(new_expr), allow_override);
   this->transitive_comparisons.Bind(var, expr, allow_override);
+
+  // CPPMEGA: forward to TileLang Z3Prover (if registered).
+  if (g_bind_expr_hook) g_bind_expr_hook(this, var, expr, allow_override);
 }
 
 void Analyzer::Bind(const Var& var, const Range& range, bool allow_override) {
@@ -66,6 +82,9 @@ void Analyzer::Bind(const Var& var, const Range& range, bool allow_override) {
   }
   // skip modular_set
   // skip rewrite simplify
+
+  // CPPMEGA: forward to TileLang Z3Prover (if registered).
+  if (g_bind_range_hook) g_bind_range_hook(this, var, range, allow_override);
 }
 
 void Analyzer::MarkGlobalNonNegValue(const PrimExpr& value) {
@@ -134,6 +153,8 @@ std::function<void()> Analyzer::EnterConstraint(const PrimExpr& constraint) {
   recovery.push_back(this->rewrite_simplify.EnterConstraint(constraint));
   recovery.push_back(this->int_set.EnterConstraint(constraint));
   recovery.push_back(this->transitive_comparisons.EnterConstraint(constraint));
+  // CPPMEGA: forward to TileLang Z3Prover (if registered).
+  if (g_enter_constraint_hook) recovery.push_back(g_enter_constraint_hook(this, constraint));
   return [recovery = std::move(recovery)]() {
     for (auto it = recovery.rbegin(); it != recovery.rend(); ++it) {
       if (*it) (*it)();
@@ -149,6 +170,10 @@ void ConstraintContext::EnterWithScope() {
   recovery_functions_.push_back(analyzer_->rewrite_simplify.EnterConstraint(constraint_));
   recovery_functions_.push_back(analyzer_->int_set.EnterConstraint(constraint_));
   recovery_functions_.push_back(analyzer_->transitive_comparisons.EnterConstraint(constraint_));
+  // CPPMEGA: forward to TileLang Z3Prover (if registered).
+  if (g_enter_constraint_hook) {
+    recovery_functions_.push_back(g_enter_constraint_hook(analyzer_, constraint_));
+  }
 }
 
 void ConstraintContext::ExitWithScope() {
