@@ -161,7 +161,7 @@ def call_cpacked(*args, span=None):
     return Call("int32", Op.get("tirx.tvm_call_cpacked"), call_args, span)
 
 
-def call_intrin(dtype, func_name, *args, span=None):
+def call_intrin(dtype, func_name, *args, span=None, annotations=None, **kwargs):
     """Build expression by calling an intrinsic function.
 
     Intrinsics can be overloaded with multiple data types via
@@ -181,11 +181,21 @@ def call_intrin(dtype, func_name, *args, span=None):
     span : Optional[Span]
         The location of this operator in the source code.
 
+    annotations : Optional[Mapping]
+        CPPMEGA: re-accepted kwarg dropped from apache/tvm latest. Currently
+        ignored on the Python side (the apache 4-arg Call FFI ctor doesn't
+        accept it). The C++ ``tirx::CallNode`` field is preserved via the
+        ``3rdparty/tvm/include/tvm/tirx/expr.h`` patch for direct C++ callers.
+
     Returns
     -------
     call : PrimExpr
         The call expression.
     """
+    # CPPMEGA: silently accept and drop ``annotations`` / extra kwargs so that
+    # TileLang call sites (tilelang/language/tir/op.py) keep working after
+    # apache/tvm dropped the kwarg from the Python wrapper.
+    del annotations, kwargs
     return Call(dtype, func_name, args, span)
 
 

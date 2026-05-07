@@ -303,10 +303,16 @@ void CodeGenMetal::PrintVecElemStore(const std::string& vec, DataType t, int i,
 void CodeGenMetal::PrintStorageScope(const std::string& scope, std::ostream& os) {  // NOLINT(*)
   if (scope == "global") {
     os << "device ";
-  } else if (scope == "shared") {
+  } else if (scope == "shared" || scope == "shared.dyn") {
+    // CPPMEGA: accept "shared.dyn" tag (TileLang dynamic shared memory variant)
     os << "threadgroup ";
   } else if (scope == "local") {
     os << "thread ";
+  } else if (scope == "metal.simdgroup") {
+    // CPPMEGA: TileLang-specific scope for Apple Silicon simdgroup matrices.
+    // The actual `simdgroup_<dtype>8x8 vid[N];` declaration is emitted by
+    // VisitStmt_(AllocBufferNode) above; PrintStorageScope is a no-op here so
+    // any incidental call (e.g. function param with this scope) does not abort.
   } else {
     TVM_FFI_THROW(InternalError) << "Unknown storage scope `" << scope << "`";
   }
@@ -351,6 +357,35 @@ void CodeGenMetal::VisitStmt_(const AllocBufferNode* op) {
   if (op->annotations.count(tirx::attr::kVolatile)) {
     MarkVolatile(op->buffer->data.get());
   }
+}
+
+void CodeGenMetal::VisitStmt_(const AttrStmtNode* op) {
+  if (op->attr_key == "pragma_unroll_factor") {
+    const auto* factor = op->value.as<IntImmNode>();
+    TVM_FFI_ICHECK(factor) << "pragma_unroll_factor expects an IntImm value";
+    const auto* loop_var = op->node.as<VarNode>();
+    TVM_FFI_ICHECK(loop_var) << "pragma_unroll_factor expects a loop var node";
+    unroll_factor_[loop_var] = Downcast<IntImm>(factor);
+  }
+  CodeGenC::VisitStmt_(op);
+}
+
+void CodeGenMetal::VisitStmt_(const ForNode* op) {
+  if (op->kind == ForKind::kUnrolled) {
+    PrintIndent();
+    auto it = unroll_factor_.find(op->loop_var.get());
+    auto ann = op->annotations.find("pragma_unroll_factor");
+    if (ann != op->annotations.end()) {
+      const auto* factor = (*ann).second.as<IntImmNode>();
+      TVM_FFI_ICHECK(factor) << "pragma_unroll_factor expects an IntImm value";
+      stream << "#pragma unroll " << PrintExpr(ffi::GetRef<IntImm>(factor)) << "\n";
+    } else if (it == unroll_factor_.end()) {
+      stream << "#pragma unroll\n";
+    } else {
+      stream << "#pragma unroll " << PrintExpr(it->second) << "\n";
+    }
+  }
+  CodeGenC::VisitStmt_(op);
 }
 
 void CodeGenMetal::VisitExpr_(const SelectNode* op, std::ostream& os) {  // NOLINT(*)

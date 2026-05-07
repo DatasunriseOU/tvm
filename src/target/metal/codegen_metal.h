@@ -52,6 +52,8 @@ class CodeGenMetal final : public CodeGenC {
   void PrintVecElemStore(const std::string& vec, DataType t, int i, const std::string& value) final;
   // overload visitor
   void VisitStmt_(const AllocBufferNode* op) final;                  // NOLINT(*)
+  void VisitStmt_(const AttrStmtNode* op) final;                     // NOLINT(*)
+  void VisitStmt_(const ForNode* op) final;                          // NOLINT(*)
   void VisitExpr_(const SelectNode* op, std::ostream& os) final;     // NOLINT(*)
   void VisitExpr_(const BroadcastNode* op, std::ostream& os) final;  // NOLINT(*)
   void VisitExpr_(const CallNode* op, std::ostream& os) final;       // NOLINT(*)
@@ -62,6 +64,7 @@ class CodeGenMetal final : public CodeGenC {
 
  private:
   std::unordered_map<const VarNode*, std::string> simdgroup_dtype_;
+  std::unordered_map<const VarNode*, IntImm> unroll_factor_;
   int thread_index_bits_{32};
   int thread_work_dim_{0};
   Target target_;

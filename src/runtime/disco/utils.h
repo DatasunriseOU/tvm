@@ -20,6 +20,7 @@
 #define TVM_RUNTIME_DISCO_UTILS_H_
 
 #include <dlpack/dlpack.h>
+#include <tvm/ffi/error.h>
 #include <tvm/runtime/disco/disco_worker.h>
 
 #include <string>

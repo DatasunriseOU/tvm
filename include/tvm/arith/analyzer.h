@@ -29,6 +29,7 @@
 #include <tvm/ir/expr.h>
 #include <tvm/ir/with_context.h>
 
+#include <functional>  // CPPMEGA: for Analyzer::EnterConstraint shim
 #include <limits>
 #include <memory>
 #include <unordered_map>
@@ -704,6 +705,24 @@ class TVM_DLL Analyzer {
    *        between variables.
    */
   void Bind(const ffi::Map<Var, Range>& variables, bool allow_override = false);
+  // CPPMEGA: restored public Analyzer::EnterConstraint (apache replaced with
+  // RAII With<ConstraintContext>; TileLang's constr_visitor.h still needs the
+  // function-cleanup form). Aggregates sub-analyzer EnterConstraint calls.
+  std::function<void()> EnterConstraint(const PrimExpr& constraint);
+
+  // CPPMEGA: callback hooks so external sub-analyzers (e.g. TileLang's vendored
+  // Z3Prover) can be auto-driven from `Analyzer::Bind` / `ConstraintContext`.
+  // libtilelang.dylib registers these at static init; libtvm_compiler.dylib
+  // calls them only if registered. Default = nullptr → no-op.
+  using BindExprHook =
+      void(*)(Analyzer* self, const Var& var, const PrimExpr& expr, bool allow_override);
+  using BindRangeHook =
+      void(*)(Analyzer* self, const Var& var, const Range& range, bool allow_override);
+  using EnterConstraintHook =
+      std::function<void()>(*)(Analyzer* self, const PrimExpr& constraint);
+  TVM_DLL static void RegisterBindExprHook(BindExprHook hook);
+  TVM_DLL static void RegisterBindRangeHook(BindRangeHook hook);
+  TVM_DLL static void RegisterEnterConstraintHook(EnterConstraintHook hook);
   /*!
    * \brief Whether can we prove expr >= val.
 

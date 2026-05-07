@@ -731,9 +731,19 @@ class CallNode : public PrimExprNode {
   /*! \brief The arguments. */
   ffi::Array<PrimExpr> args;
 
+  // CPPMEGA: TileLang depends on per-instance annotations on Call (e.g., pipeline_buffer_idx)
+  // for its operator-builder dispatch. Apache/tvm latest dropped this field as part of FFI
+  // modernization (PR #17920) — annotations are now expected via T.attr scope blocks.
+  // Restoring as a TileLang-side extension keeps TileLang's dispatch architecture intact
+  // while remaining ABI-compatible (we recompile the whole tvm-from-source).
+  ffi::Map<ffi::String, ffi::ObjectRef> annotations;
+
   static void RegisterReflection() {
     namespace refl = tvm::ffi::reflection;
-    refl::ObjectDef<CallNode>().def_ro("op", &CallNode::op).def_ro("args", &CallNode::args);
+    refl::ObjectDef<CallNode>()
+        .def_ro("op", &CallNode::op)
+        .def_ro("args", &CallNode::args)
+        .def_ro("annotations", &CallNode::annotations);
   }
   TVM_FFI_DECLARE_OBJECT_INFO_FINAL("tirx.Call", CallNode, PrimExprNode);
 };
@@ -745,6 +755,10 @@ class CallNode : public PrimExprNode {
 class Call : public PrimExpr {
  public:
   TVM_DLL Call(DataType dtype, RelaxExpr op, ffi::Array<PrimExpr> args, Span span = Span());
+  // CPPMEGA: TileLang fork extension — store annotations on CallNode (restored field).
+  TVM_DLL Call(DataType dtype, RelaxExpr op, ffi::Array<PrimExpr> args,
+               ffi::Map<ffi::String, ffi::ObjectRef> annotations,
+               Span span = Span());
   TVM_FFI_DEFINE_OBJECT_REF_METHODS_NULLABLE(Call, PrimExpr, CallNode);
   TVM_DEFINE_OBJECT_REF_COW_METHOD(CallNode);
 };

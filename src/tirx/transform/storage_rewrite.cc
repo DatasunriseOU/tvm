@@ -1275,8 +1275,28 @@ class VectorTypeAccessChecker : public StmtExprVisitor {
    */
   void OnArrayDeclaration(Var buffer, DataType element_dtype, PrimExpr extent,
                           BufferVarInfo::DeclarationLocation declaration_location) {
-    TVM_FFI_ICHECK(info_map_.find(buffer.get()) == info_map_.end())
-        << "Array declaration of " << buffer->name_hint << " occurred multiple times.";
+    // CPPMEGA: idempotent declaration. Apache's strict check fails when the
+    // same buffer var is declared multiple times (e.g. a function-arg buffer
+    // re-declared via DeclBuffer / inner T.Buffer alias, or two AllocBuffer
+    // nodes coalesced by upstream passes). TileLang's emitter routinely
+    // produces such IR for `q8`, `q8_act`, and shared/local buffers. Merge
+    // metadata instead of erroring.
+    auto existing_it = info_map_.find(buffer.get());
+    if (existing_it != info_map_.end()) {
+      BufferVarInfo& existing = existing_it->second;
+      if (existing.element_dtype.is_handle() && !element_dtype.is_handle()) {
+        existing.element_dtype =
+            element_dtype == DataType::Bool()
+                ? DataType::Int(8).with_lanes(element_dtype.lanes())
+                : element_dtype;
+      }
+      if (!existing.extent.defined() || is_zero(existing.extent)) {
+        existing.extent = extent;
+      }
+      existing.declaration_location = static_cast<BufferVarInfo::DeclarationLocation>(
+          existing.declaration_location | declaration_location);
+      return;
+    }
 
     if (element_dtype == DataType::Bool()) {
       element_dtype = DataType::Int(8).with_lanes(element_dtype.lanes());
@@ -1298,6 +1318,23 @@ class VectorTypeAccessChecker : public StmtExprVisitor {
   void OnArrayAccess(DataType value_dtype, const VarNode* buffer,
                      const ffi::Array<PrimExpr>& indices, bool is_buffer_load) {
     auto it = info_map_.find(buffer);
+    if (it == info_map_.end()) {
+      // CPPMEGA: lenient registration on miss. TileLang's lowering emits
+      // free-standing `T.Buffer(...)` aliases inside loop bodies (e.g. q8,
+      // q8_act, A, B re-declared as strided views) that reference a Var
+      // without an accompanying Allocate / AllocBuffer / DeclBuffer / Let.
+      // Apache's body-less AllocBuffer dropped the implicit lexical
+      // declaration the legacy storage_rewrite relied upon. When
+      // `allow_untyped_pointers_` is set (the path tilelang invokes), treat
+      // this access as a let-style declaration of the access dtype so
+      // subsequent uses are accepted; the rewriter leaves such buffers
+      // untouched.
+      if (allow_untyped_pointers_) {
+        Var var = ffi::GetRef<Var>(buffer);
+        OnArrayDeclaration(var, value_dtype, /*extent=*/0, BufferVarInfo::kLetNode);
+        it = info_map_.find(buffer);
+      }
+    }
     TVM_FFI_ICHECK(it != info_map_.end()) << "Load/Store of buffer " << buffer->name_hint << " ("
                                           << buffer << ") occurred before its declaration.";
 

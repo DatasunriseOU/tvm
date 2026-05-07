@@ -160,6 +160,13 @@ TVM_REGISTER_OP("tirx.metal.simd_shuffle_down")
     .set_attr<TGlobalSymbol>("TGlobalSymbol", "simd_shuffle_down")
     .set_attr<TCallEffectKind>("TCallEffectKind", Integer(CallEffectKind::kOpaque));
 
+
+TVM_REGISTER_OP("tirx.metal.simd_sum")
+    .set_num_inputs(1)
+    .add_argument("var", "Expr", "The value to reduce across a SIMD group.")
+    .set_attr<TGlobalSymbol>("TGlobalSymbol", "simd_sum")
+    .set_attr<TCallEffectKind>("TCallEffectKind", Integer(CallEffectKind::kOpaque));
+
 }  // namespace intrin
 }  // namespace codegen
 }  // namespace tvm

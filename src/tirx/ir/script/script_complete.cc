@@ -86,13 +86,23 @@ class ScriptCompleter : public StmtMutator {
       const ffi::Array<BufferRegion>& reads = access_region[0];
       const ffi::Array<BufferRegion>& writes = access_region[1];
       const ffi::Array<BufferRegion>& opaque = access_region[2];
-      TVM_FFI_CHECK(opaque.empty(), ValueError)
-          << "Can not auto detect buffer access region from tirx.Load, tirx.Store or "
-             "direct access by buffer data. Please annotation the access region manually";
+      // CPPMEGA: relax the opaque-rejection so TVMScript prim_funcs that use
+      // direct buffer Load/Store (no explicit T.reads/T.writes) still parse.
+      // Vendored from stack-c semantics: fold opaque accesses into both
+      // reads and writes lists instead of LOG(FATAL)-ing. This restores
+      // the auto-detect fallback the apache tirx parser dropped.
       auto n = CopyOnWrite(block.operator->());
       if (!is_root_block) {
-        if (mask & 1) n->reads = reads;
-        if (mask & 2) n->writes = writes;
+        if (mask & 1) {
+          ffi::Array<BufferRegion> merged_reads = reads;
+          for (const auto& r : opaque) merged_reads.push_back(r);
+          n->reads = merged_reads;
+        }
+        if (mask & 2) {
+          ffi::Array<BufferRegion> merged_writes = writes;
+          for (const auto& r : opaque) merged_writes.push_back(r);
+          n->writes = merged_writes;
+        }
       }
       n->annotations = op->annotations;
       n->annotations.erase(s_tir::attr::script_parsing_detect_access);
