@@ -28,13 +28,20 @@ following the following principles:
 - Python-first development that enables quick customization of machine learning compiler pipelines.
 - Universal deployment to bring models into minimum deployable modules.
 
-CPPMEGA Local Patches (branch `tilelang-apache-tvm-migration`)
---------------------------------------------------------------
+CPPMEGA Local Patches (Apple Metal + Z3 Analyzer)
+-------------------------------------------------
 
 This fork at `apstenku123/tvm` carries narrow local patches that the
 TileLang fork at `DatasunriseOU/tilelang` (branch `metal-gemm-upstream-rebase`)
-depends on. All patches are marked `// CPPMEGA:` in the source so they can be
-greppen, audited, and removed once upstream covers the same surface.
+depends on for the Apple-Silicon-Metal lowering pipeline. All patches are
+marked `// CPPMEGA:` in the source so they can be grepped, audited, and
+removed once upstream covers the same surface.
+
+The two parallel feature branches that previously carried these patches —
+`cppmega/metal-shared-storage-opt-in` and `tilelang-apache-tvm-migration` —
+have both been merged into `main`, so downstream consumers can pin
+`apstenku123/tvm@main` rather than picking one feature branch. The
+historical branches are preserved (no force-deletes).
 
 Current patch set:
 
@@ -80,6 +87,33 @@ Current patch set:
    forwards to the per-Analyzer cached `tilelang::tlz3::Z3Prover`
    instance, restoring the constraint-aware partial-sync semantics from
    stack-c / tl_pr_c.
+
+3. **Metal runtime storage-mode opt-in** (commit `7cc4ce14f`,
+   `src/runtime/metal/metal_device_api.mm`).  Adds the
+   `TVM_METAL_STORAGE_MODE` environment variable to override the default
+   `MTLResourceStorageModePrivate` allocation when creating Metal
+   buffers.  Accepted values: `private` | `shared` | `managed`.  The
+   `shared` mode is required for zero-copy DLPack interop with MLX
+   (which uses `MTLResourceStorageModeShared` everywhere); without it,
+   MLX-imported tensors trigger a copy through a private staging
+   buffer.  The selected mode is exposed back to Python via the
+   `metal.GetStorageMode` packed-func FFI helper so TileLang's runtime
+   can branch on it.  Default behavior is unchanged when the env var is
+   unset.
+
+4. **Preserve Metal unroll factor annotations** (commit `8758254ba`,
+   `src/target/metal/codegen_metal.cc`,
+   `src/target/source/codegen_c.cc`).  The Metal codegen previously
+   dropped `pragma_unroll_factor` and `pragma_unroll_explicit`
+   annotations during lowering, silently emitting an unbounded
+   `#pragma unroll`.  The patch threads the explicit unroll factor
+   through `CodeGenC::PrintForBody` so TileLang can force scalar
+   unroll on the FP8 dot4 reduction loop (where letting the Metal
+   shader compiler decide on its own pessimizes register pressure on
+   M2/M3).  Behavior is unchanged for loops without the annotation.
+
+These patches are intentionally narrow and surface-only — no semantic
+changes to TIR / Relax / public API.
 
 License
 -------
