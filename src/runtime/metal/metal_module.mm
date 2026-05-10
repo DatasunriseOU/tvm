@@ -25,6 +25,7 @@
  *        side construction goes through src/target/metal/metal_fallback_module.h.
  */
 #include <tvm/ffi/cast.h>
+#include <tvm/ffi/extra/c_env_api.h>
 #include <tvm/ffi/extra/json.h>
 #include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/function.h>
@@ -227,9 +228,13 @@ class MetalWrappedFunc {
       metal::Stream* stream = nullptr;
 
       if (external_command_buffer == nil) {
+        TVMStreamHandle current_stream = t->stream[device_id];
+        if (current_stream == nullptr) {
+          current_stream = TVMFFIEnvGetStream(kDLMetal, device_id);
+        }
         // obtain the stream
         stream =
-            metal::MetalWorkspace::Global()->CastStreamOrGetDefault(t->stream[device_id], device_id);
+            metal::MetalWorkspace::Global()->CastStreamOrGetDefault(current_stream, device_id);
 
         // skip launching so the error can be printed during sync
         if (stream->HasErrorHappened()) return;

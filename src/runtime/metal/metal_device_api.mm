@@ -20,6 +20,7 @@
 /*!
  * \file metal_device_api.mm
  */
+#include <tvm/ffi/extra/c_env_api.h>
 #include <tvm/ffi/function.h>
 #include <tvm/ffi/reflection/registry.h>
 #include <tvm/runtime/logging.h>
@@ -329,7 +330,11 @@ void MetalWorkspace::SetStream(Device dev, TVMStreamHandle stream) {
 
 TVMStreamHandle MetalWorkspace::GetCurrentStream(Device dev) {
   TVM_FFI_ICHECK_LT(dev.device_id, devices.size()) << "Invalid device id " << dev.device_id;
-  return MetalThreadEntry::ThreadLocal()->stream[dev.device_id];
+  TVMStreamHandle stream = MetalThreadEntry::ThreadLocal()->stream[dev.device_id];
+  if (stream != nullptr) {
+    return stream;
+  }
+  return DeviceAPI::GetCurrentStream(dev);
 }
 
 void MetalWorkspace::StreamSync(Device dev, TVMStreamHandle stream) {
@@ -482,7 +487,7 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       .def("metal.GetCurrentTVMStream",
            []() -> void* {
              MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
-             return t->stream[t->device.device_id];
+             return MetalWorkspace::Global()->GetCurrentStream(t->device);
            })
       .def("metal.SetStream", set_external_command_buffer)
       .def("metal.ResetGlobalState",
