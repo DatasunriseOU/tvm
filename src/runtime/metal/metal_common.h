@@ -318,6 +318,8 @@ class MetalWorkspace final : public DeviceAPI {
   void FreeDataSpace(Device dev, void* ptr) final;
   TVMStreamHandle CreateStream(Device dev) final;
   void FreeStream(Device dev, TVMStreamHandle stream) final;
+  void SetStream(Device dev, TVMStreamHandle stream) final;
+  TVMStreamHandle GetCurrentStream(Device dev) final;
   void StreamSync(Device dev, TVMStreamHandle stream) final;
   void* AllocWorkspace(Device dev, size_t size, DLDataType type_hint) final;
   void FreeWorkspace(Device dev, void* data) final;
@@ -348,6 +350,14 @@ class MetalWorkspace final : public DeviceAPI {
 /*! \brief Thread local workspace */
 class MetalThreadEntry {
  public:
+  struct ExternalCommandBufferState {
+    id<MTLCommandBuffer> command_buffer = nil;
+    id<MTLSharedEvent> wait_event = nil;
+    uint64_t wait_value = 0;
+    id<MTLSharedEvent> signal_event = nil;
+    uint64_t signal_value = 0;
+  };
+
   /*! \brief The current device */
   Device device;
   /*! \brief The current stream */
@@ -413,6 +423,7 @@ class MetalThreadEntry {
     size_t next_index_ = 0;  // sequential within current batch, reset on sync
   };
   std::vector<StagingBufferPool> staging_pools_;  // per device
+  std::vector<ExternalCommandBufferState> external_command_buffers_;  // borrowed per device
   /*! \brief workspace pool */
   WorkspacePool pool;
   // constructor
@@ -421,6 +432,7 @@ class MetalThreadEntry {
     device.device_type = static_cast<DLDeviceType>(kDLMetal);
     MetalWorkspace* global_ws = MetalWorkspace::Global();
     this->stream.resize(global_ws->devices.size(), nullptr);
+    this->external_command_buffers_.resize(global_ws->devices.size());
     this->staging_pools_.resize(global_ws->devices.size());
   }
   ~MetalThreadEntry();
@@ -432,6 +444,14 @@ class MetalThreadEntry {
   bool StagingPoolNeedsFlush(Device dev);
   // Reset the staging pool index after a flush.
   void ResetStagingPool(Device dev);
+  // Set/get a borrowed external command buffer/event state for interop-owned scheduling.
+  void SetExternalCommandBuffer(int device_id, id<MTLCommandBuffer> command_buffer);
+  void SetExternalCommandBufferWithEvents(int device_id, id<MTLCommandBuffer> command_buffer,
+                                          id<MTLSharedEvent> wait_event, uint64_t wait_value,
+                                          id<MTLSharedEvent> signal_event, uint64_t signal_value);
+  void ClearExternalCommandBuffer(int device_id);
+  id<MTLCommandBuffer> GetExternalCommandBuffer(int device_id);
+  ExternalCommandBufferState GetExternalCommandBufferState(int device_id);
   // get the global workspace
   static MetalThreadEntry* ThreadLocal();
 };

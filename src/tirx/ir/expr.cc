@@ -620,40 +620,51 @@ Call::Call(DataType dtype, RelaxExpr op, ffi::Array<PrimExpr> args,
   data_ = std::move(node);
 }
 
+using CallArg = ffi::Variant<ffi::String, DLDataType, IterVar, BufferRegion, PrimExpr>;
+
+ffi::Array<PrimExpr> NormalizeCallArgs(const ffi::Array<CallArg>& args) {
+  ffi::Array<PrimExpr> prim_expr_args;
+  for (const auto& it : args) {
+    if (auto opt_str = it.as<ffi::String>()) {
+      prim_expr_args.push_back(StringImm(opt_str.value()));
+    } else if (auto opt_dtype = it.as<DLDataType>()) {
+      prim_expr_args.push_back(StringImm(ffi::DLDataTypeToString(opt_dtype.value())));
+    } else if (const auto* iter_var = it.as<IterVarNode>()) {
+      prim_expr_args.push_back(iter_var->var);
+    } else if (const auto* br = it.as<BufferRegionNode>()) {
+      ffi::Array<PrimExpr> indices;
+      for (Range r : br->region) {
+        if (is_one(r->extent)) {
+          indices.push_back(r->min);
+        } else if (r->extent.as<IntImmNode>()) {
+          indices.push_back(tirx::Ramp(r->min, make_const(r->min->dtype, 1), r->extent));
+        } else {
+          TVM_FFI_THROW(ValueError)
+              << "Cannot convert to BufferLoad: " << ffi::GetRef<BufferRegion>(br);
+        }
+      }
+      prim_expr_args.push_back(BufferLoad(br->buffer, indices));
+    } else {
+      prim_expr_args.push_back(Downcast<PrimExpr>(it));
+    }
+  }
+  return prim_expr_args;
+}
+
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
-  refl::GlobalDef().def(
-      "tirx.Call",
-      [](ffi::Optional<DataType> dtype, RelaxExpr op,
-         ffi::Array<ffi::Variant<ffi::String, DLDataType, IterVar, BufferRegion, PrimExpr>> args,
-         Span span) {
-        ffi::Array<PrimExpr> prim_expr_args;
-        for (const auto& it : args) {
-          if (auto opt_str = it.as<ffi::String>()) {
-            prim_expr_args.push_back(StringImm(opt_str.value()));
-          } else if (auto opt_dtype = it.as<DLDataType>()) {
-            prim_expr_args.push_back(StringImm(ffi::DLDataTypeToString(opt_dtype.value())));
-          } else if (const auto* iter_var = it.as<IterVarNode>()) {
-            prim_expr_args.push_back(iter_var->var);
-          } else if (const auto* br = it.as<BufferRegionNode>()) {
-            ffi::Array<PrimExpr> indices;
-            for (Range r : br->region) {
-              if (is_one(r->extent)) {
-                indices.push_back(r->min);
-              } else if (r->extent.as<IntImmNode>()) {
-                indices.push_back(tirx::Ramp(r->min, make_const(r->min->dtype, 1), r->extent));
-              } else {
-                TVM_FFI_THROW(ValueError)
-                    << "Cannot convert to BufferLoad: " << ffi::GetRef<BufferRegion>(br);
-              }
-            }
-            prim_expr_args.push_back(BufferLoad(br->buffer, indices));
-          } else {
-            prim_expr_args.push_back(Downcast<PrimExpr>(it));
-          }
-        }
-        return Call(dtype.value_or(DataType::Void()), op, prim_expr_args, span);
-      });
+  refl::GlobalDef()
+      .def("tirx.Call",
+           [](ffi::Optional<DataType> dtype, RelaxExpr op, ffi::Array<CallArg> args,
+              Span span) {
+             return Call(dtype.value_or(DataType::Void()), op, NormalizeCallArgs(args), span);
+           })
+      .def("tirx.CallWithAnnotations",
+           [](ffi::Optional<DataType> dtype, RelaxExpr op, ffi::Array<CallArg> args,
+              ffi::Map<ffi::String, ffi::ObjectRef> annotations, Span span) {
+             return Call(dtype.value_or(DataType::Void()), op, NormalizeCallArgs(args),
+                         std::move(annotations), span);
+           });
 }
 
 // Shuffle

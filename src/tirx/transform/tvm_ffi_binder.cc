@@ -616,14 +616,18 @@ void TVMFFIABIBuilder::BindAutoBroadcastStrides(const Buffer& buffer, const Var&
 void TVMFFIABIBuilder::BindRegularStrides(const Buffer& buffer, const Var& strides_ptr,
                                           const Var& shape_ptr, const PrimExpr& v_strides_is_null,
                                           const ffi::reflection::AccessPath& param_path) {
+  (void)shape_ptr;
   PrimExpr stride_from_shape = 1;
   for (int k = buffer->strides.size() - 1; k >= 0; k--) {
-    PrimExpr explicit_stride = cast(buffer->shape[k].dtype(), LoadInt64ArrayElem(strides_ptr, k));
+    DataType stride_dtype = buffer->strides[k].dtype();
+    PrimExpr explicit_stride = cast(stride_dtype, LoadInt64ArrayElem(strides_ptr, k));
     ffi::reflection::AccessPath strides_k_path = param_path->Attr(ffi::String("strides"))->ArrayItem(k);
     BindScalar(buffer->strides[k],
-               tvm::if_then_else(v_strides_is_null, stride_from_shape, explicit_stride),
+               tvm::if_then_else(v_strides_is_null, cast(stride_dtype, stride_from_shape),
+                                 explicit_stride),
                strides_k_path, true);
-    stride_from_shape *= cast(buffer->shape[k].dtype(), LoadInt64ArrayElem(shape_ptr, k));
+    stride_from_shape =
+        analyzer_.Simplify(stride_from_shape * cast(stride_dtype, buffer->shape[k]));
   }
 }
 

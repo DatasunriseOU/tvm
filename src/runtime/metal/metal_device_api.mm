@@ -321,6 +321,17 @@ void MetalWorkspace::FreeStream(Device dev, TVMStreamHandle stream) {
   delete static_cast<Stream*>(stream);
 }
 
+void MetalWorkspace::SetStream(Device dev, TVMStreamHandle stream) {
+  TVM_FFI_ICHECK_LT(dev.device_id, devices.size()) << "Invalid device id " << dev.device_id;
+  MetalThreadEntry::ThreadLocal()->stream[dev.device_id] = stream;
+  DeviceAPI::SetStream(dev, stream);
+}
+
+TVMStreamHandle MetalWorkspace::GetCurrentStream(Device dev) {
+  TVM_FFI_ICHECK_LT(dev.device_id, devices.size()) << "Invalid device id " << dev.device_id;
+  return MetalThreadEntry::ThreadLocal()->stream[dev.device_id];
+}
+
 void MetalWorkspace::StreamSync(Device dev, TVMStreamHandle stream) {
   AUTORELEASEPOOL {
     Stream* s = CastStreamOrGetDefault(stream, dev.device_id);
@@ -387,6 +398,49 @@ bool MetalThreadEntry::StagingPoolNeedsFlush(Device dev) {
 
 void MetalThreadEntry::ResetStagingPool(Device dev) { staging_pools_[dev.device_id].ResetIndex(); }
 
+void MetalThreadEntry::SetExternalCommandBuffer(int device_id,
+                                                id<MTLCommandBuffer> command_buffer) {
+  if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
+    external_command_buffers_.resize(device_id + 1);
+  }
+  external_command_buffers_[device_id] = ExternalCommandBufferState{command_buffer, nil, 0, nil, 0};
+}
+
+void MetalThreadEntry::SetExternalCommandBufferWithEvents(int device_id,
+                                                          id<MTLCommandBuffer> command_buffer,
+                                                          id<MTLSharedEvent> wait_event,
+                                                          uint64_t wait_value,
+                                                          id<MTLSharedEvent> signal_event,
+                                                          uint64_t signal_value) {
+  if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
+    external_command_buffers_.resize(device_id + 1);
+  }
+  external_command_buffers_[device_id] =
+      ExternalCommandBufferState{command_buffer, wait_event, wait_value, signal_event, signal_value};
+}
+
+void MetalThreadEntry::ClearExternalCommandBuffer(int device_id) {
+  if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
+    return;
+  }
+  external_command_buffers_[device_id] = ExternalCommandBufferState{};
+}
+
+id<MTLCommandBuffer> MetalThreadEntry::GetExternalCommandBuffer(int device_id) {
+  if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
+    return nil;
+  }
+  return external_command_buffers_[device_id].command_buffer;
+}
+
+MetalThreadEntry::ExternalCommandBufferState MetalThreadEntry::GetExternalCommandBufferState(
+    int device_id) {
+  if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
+    return ExternalCommandBufferState{};
+  }
+  return external_command_buffers_[device_id];
+}
+
 MetalThreadEntry* MetalThreadEntry::ThreadLocal() {
   static thread_local MetalThreadEntry inst;
   return &inst;
@@ -394,12 +448,43 @@ MetalThreadEntry* MetalThreadEntry::ThreadLocal() {
 
 TVM_FFI_STATIC_INIT_BLOCK() {
   namespace refl = tvm::ffi::reflection;
+  auto set_external_command_buffer = [](void* command_buffer) {
+    MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+    t->SetExternalCommandBuffer(t->device.device_id, (id<MTLCommandBuffer>)command_buffer);
+  };
+
   refl::GlobalDef()
       .def_packed("device_api.metal",
                   [](ffi::PackedArgs args, ffi::Any* rv) {
                     DeviceAPI* ptr = MetalWorkspace::Global();
                     *rv = static_cast<void*>(ptr);
                   })
+      .def("metal.SetExternalCommandBuffer", set_external_command_buffer)
+      .def("metal.SetExternalCommandBufferWithEvents",
+           [](void* command_buffer, void* wait_event, int64_t wait_value, void* signal_event,
+              int64_t signal_value) {
+             MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+             t->SetExternalCommandBufferWithEvents(
+                 t->device.device_id, (id<MTLCommandBuffer>)command_buffer,
+                 (id<MTLSharedEvent>)wait_event, static_cast<uint64_t>(wait_value),
+                 (id<MTLSharedEvent>)signal_event, static_cast<uint64_t>(signal_value));
+           })
+      .def("metal.ClearExternalCommandBuffer",
+           []() {
+             MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+             t->ClearExternalCommandBuffer(t->device.device_id);
+           })
+      .def("metal.GetExternalCommandBuffer",
+           []() -> void* {
+             MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+             return (void*)t->GetExternalCommandBuffer(t->device.device_id);
+           })
+      .def("metal.GetCurrentTVMStream",
+           []() -> void* {
+             MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+             return t->stream[t->device.device_id];
+           })
+      .def("metal.SetStream", set_external_command_buffer)
       .def("metal.ResetGlobalState",
            []() { MetalWorkspace::Global()->ReinitializeDefaultStreams(); })
       .def("metal.GetProfileCounters",
