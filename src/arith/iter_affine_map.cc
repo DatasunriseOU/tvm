@@ -2136,7 +2136,8 @@ bool IterMapRewriter::CanProveDivisible(const PrimExpr& lhs, const PrimExpr& rhs
   PrimExpr divisor = normalizer.Convert(rhs);
 
   return analyzer_->CanProveEqual(dividend, divisor) ||
-         analyzer_->CanProve(floormod(dividend, divisor) == 0);
+         analyzer_->CanProve(floormod(dividend, divisor) == 0) ||
+         is_zero(analyzer_->Simplify(floormod(dividend, divisor)));
 }
 
 PrimExpr NormalizeIterMapToExpr(const PrimExpr& expr) {
