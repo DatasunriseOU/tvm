@@ -12,4 +12,4 @@
 	url = https://github.com/tlc-pack/libflash_attn
 [submodule "3rdparty/tvm-ffi"]
 	path = 3rdparty/tvm-ffi
-	url = https://github.com/jeweldave/tvm-ffi.git
+	url = https://github.com/DatasunriseOU/tvm-ffi.git
