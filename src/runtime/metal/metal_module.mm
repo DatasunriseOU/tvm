@@ -48,6 +48,29 @@
 namespace tvm {
 namespace runtime {
 
+namespace {
+
+MTLLanguageVersion GetMetalLanguageVersion() {
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
+  if (@available(macOS 26.0, *)) {
+    return MTLLanguageVersion4_0;
+  }
+#endif
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
+  if (@available(macOS 15.0, *)) {
+    return MTLLanguageVersion3_2;
+  }
+#endif
+#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 140000
+  if (@available(macOS 14.0, *)) {
+    return MTLLanguageVersion3_1;
+  }
+#endif
+  return MTLLanguageVersion2_3;
+}
+
+}  // namespace
+
 /*! \brief Maximum number of GPU supported in MetalModule. */
 static constexpr const int kMetalMaxNumDevice = 32;
 
@@ -125,7 +148,7 @@ class MetalModuleNode final : public ffi::ModuleObj {
 
     if (fmt_ == "metal") {
       MTLCompileOptions* opts = [MTLCompileOptions alloc];
-      opts.languageVersion = MTLLanguageVersion2_3;
+      opts.languageVersion = GetMetalLanguageVersion();
       opts.fastMathEnabled = YES;
       // opts = nil;
       // Per-kernel payload is bytes; treat as UTF-8 MSL source.
