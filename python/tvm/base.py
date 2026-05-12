@@ -24,10 +24,29 @@ import sys
 
 from . import libinfo
 
+# ----------------------------
+# Python3 version.
+# ----------------------------
 if not (sys.version_info[0] >= 3 and sys.version_info[1] >= 9):
     PY3STATEMENT = "The minimal Python requirement is Python 3.9"
     raise Exception(PY3STATEMENT)
 
+# ----------------------------
+# library loading
+# ----------------------------
+
+# The TVM C++ side is split into two shared libraries:
+#
+# - ``libtvm_runtime`` — runtime-only sources. Loaded with ``RTLD_GLOBAL`` so
+#   its symbols are exposed to subsequent loads (NVRTC kernels, downstream
+#   modules and so on resolve runtime symbols at link time).
+# - ``libtvm_compiler`` — compiler / IR / transform sources, links against
+#   ``libtvm_runtime``. Loaded with ``RTLD_LOCAL`` so compiler internals
+#   don't leak into the global symbol namespace.
+#
+# If the environment variable ``TVM_USE_RUNTIME_LIB`` is truthy, or the
+# compiler library is simply not present (runtime-only wheel), only the
+# runtime is loaded and ``_LIB`` aliases ``_LIB_RUNTIME``.
 _extra_lib_paths = libinfo.package_lib_paths()
 _LIB_RUNTIME = libinfo.load_lib_ctypes(
     "tvm", "tvm_runtime", "RTLD_GLOBAL", extra_lib_paths=_extra_lib_paths
@@ -42,21 +61,27 @@ else:
             "tvm", "tvm_compiler", "RTLD_LOCAL", extra_lib_paths=_extra_lib_paths
         )
     except RuntimeError:
+        # Compiler lib not present — fall back to runtime-only mode.
         _LIB = _LIB_RUNTIME
         _RUNTIME_ONLY = True
 
+
 try:
+    # The following import is needed for TVM to work with pdb
     import readline  # pylint: disable=unused-import
 except ImportError:
     pass
 
+# version number
 __version__ = libinfo.__version__
+
 
 if _RUNTIME_ONLY:
     from tvm_ffi import registry as _tvm_ffi_registry
 
     _tvm_ffi_registry._SKIP_UNKNOWN_OBJECTS = True
 
+# The FFI mode of TVM
 _FFI_MODE = os.environ.get("TVM_FFI", "auto")
 
 if _FFI_MODE == "ctypes":

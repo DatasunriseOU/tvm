@@ -396,6 +396,7 @@ class PyStmtExprVisitor:
         op : For
             The For to be visited.
         """
+        print("visit_for_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_while_(self, op: While) -> None:

@@ -46,6 +46,7 @@ inline T GetEnv(const char* key, T default_value) {
   if constexpr (std::is_same_v<T, std::string>) {
     return std::string(val);
   } else if constexpr (std::is_same_v<T, bool>) {
+    // Accept "0"/"false" as false, anything else as true
     std::string s(val);
     return !(s == "0" || s == "false" || s == "False" || s == "FALSE");
   } else {

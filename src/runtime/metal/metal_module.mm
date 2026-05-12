@@ -25,7 +25,6 @@
  *        side construction goes through src/target/metal/metal_fallback_module.h.
  */
 #include <tvm/ffi/cast.h>
-#include <tvm/ffi/extra/c_env_api.h>
 #include <tvm/ffi/extra/json.h>
 #include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/function.h>
@@ -47,29 +46,6 @@
 
 namespace tvm {
 namespace runtime {
-
-namespace {
-
-MTLLanguageVersion GetMetalLanguageVersion() {
-#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 260000
-  if (@available(macOS 26.0, *)) {
-    return MTLLanguageVersion4_0;
-  }
-#endif
-#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 150000
-  if (@available(macOS 15.0, *)) {
-    return MTLLanguageVersion3_2;
-  }
-#endif
-#if defined(__MAC_OS_X_VERSION_MAX_ALLOWED) && __MAC_OS_X_VERSION_MAX_ALLOWED >= 140000
-  if (@available(macOS 14.0, *)) {
-    return MTLLanguageVersion3_1;
-  }
-#endif
-  return MTLLanguageVersion2_3;
-}
-
-}  // namespace
 
 /*! \brief Maximum number of GPU supported in MetalModule. */
 static constexpr const int kMetalMaxNumDevice = 32;
@@ -148,7 +124,7 @@ class MetalModuleNode final : public ffi::ModuleObj {
 
     if (fmt_ == "metal") {
       MTLCompileOptions* opts = [MTLCompileOptions alloc];
-      opts.languageVersion = GetMetalLanguageVersion();
+      opts.languageVersion = MTLLanguageVersion2_3;
       opts.fastMathEnabled = YES;
       // opts = nil;
       // Per-kernel payload is bytes; treat as UTF-8 MSL source.
@@ -251,13 +227,9 @@ class MetalWrappedFunc {
       metal::Stream* stream = nullptr;
 
       if (external_command_buffer == nil) {
-        TVMStreamHandle current_stream = t->stream[device_id];
-        if (current_stream == nullptr) {
-          current_stream = TVMFFIEnvGetStream(kDLMetal, device_id);
-        }
         // obtain the stream
         stream =
-            metal::MetalWorkspace::Global()->CastStreamOrGetDefault(current_stream, device_id);
+            metal::MetalWorkspace::Global()->CastStreamOrGetDefault(t->stream[device_id], device_id);
 
         // skip launching so the error can be printed during sync
         if (stream->HasErrorHappened()) return;

@@ -16,6 +16,6 @@
 # under the License.
 # pylint: disable=wildcard-import
 # ruff: noqa: F403
-"""Redirects to tvm_ffi."""
+"""Redirects to tvm_ffi"""
 
 from tvm_ffi import *

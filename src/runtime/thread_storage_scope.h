@@ -34,22 +34,49 @@
 namespace tvm {
 namespace runtime {
 
+/*!
+ * \brief Memory hierachy rank in the storage system
+ * \note The global rank and shared rank have one to one
+ *       correspondence to the thread rank.
+ */
 enum class StorageRank {
+  /*! \brief global memory */
   kGlobal = 0,
+  /*! \brief shared memory among thread group */
   kShared = 1,
+  /*!
+   * \brief reserved for warp memory.
+   *  This is only used by programming model.
+   *  There is no such memory usually in GPU.
+   *  Instead, we can simulate it by registers and shuffle.
+   */
   kWarp = 2,
+  /*! \brief thread local memory */
   kLocal = 3,
+  /*! \brief wmma scope memory of matrix_a */
   kWMMAMatrixA = 4,
+  /*! \brief wmma scope memory of matrix_b */
   kWMMAMatrixB = 5,
+  /*! \brief wmma scope memory of accumulator */
   kWMMAAccumulator = 6,
+  /*! \brief global scope texture memory */
   kTexture = 7,
+  /*! \brief global scope amx tmm memory */
   kAMXTMM = 8,
+  /*! \brief mma scope memory of matrix_a */
   kMMAMatrixA = 9,
+  /*! \brief mma scope memory of matrix_b */
   kMMAMatrixB = 10,
+  /*! \brief mma scope memory of accumulator */
   kMMAMatrixC = 11,
+  /*! \brief Metal SIMD group memory */
   kMetalSimdGroup = 12,
 };
 
+/*!
+ * \param thread_scope_rank The thread scope rank
+ * \return default storage rank given the thread scope
+ */
 inline StorageRank DefaultStorageRank(int thread_scope_rank) {
   switch (thread_scope_rank) {
     case -1:
@@ -64,14 +91,19 @@ inline StorageRank DefaultStorageRank(int thread_scope_rank) {
   }
 }
 
+/*! \brief class to represent storage scope */
 struct StorageScope {
+  /*! \brief The rank of the storage */
   StorageRank rank{StorageRank::kGlobal};
+  /*! \brief tag for special purpose memory. */
   std::string tag;
+  // comparator
   inline bool operator==(const StorageScope& other) const {
     return rank == other.rank && tag == other.tag;
   }
   inline bool operator!=(const StorageScope& other) const { return !(*this == other); }
   inline std::string to_string() const {
+    std::string ret;
     switch (rank) {
       case StorageRank::kGlobal:
         return "global" + tag;
@@ -102,6 +134,11 @@ struct StorageScope {
         return "";
     }
   }
+  /*!
+   * \brief Create storage scope from string
+   * \param s The string to be parsed.
+   * \return The storage scope.
+   */
   static StorageScope Create(const std::string& s) {
     StorageScope r;
     if (s.empty()) {
@@ -152,12 +189,21 @@ struct StorageScope {
   }
 };
 
+/*! \brief class to represent thread scope */
 struct ThreadScope {
+  /*! \brief The rank of thread scope */
   int rank{0};
+  /*! \brief the dimension index under the rank */
   int dim_index{0};
+  /*!
+   * \brief Create storage scope from string
+   * \param s The string to be parsed.
+   * \return The storage scope.
+   */
   static ThreadScope Create(const std::string& s) {
     ThreadScope r;
     if (s.compare(0, 7, "vthread") == 0 || s == "cthread") {
+      // virtual thread at the same level as local
       r.rank = 1;
       r.dim_index = -1;
     } else if (s.compare(0, 9, "blockIdx.") == 0) {
@@ -173,13 +219,24 @@ struct ThreadScope {
   }
 };
 
+/*! \brief workload specification */
 struct ThreadWorkLoad {
+  // array, first three are thread configuration.
   size_t work_size[6];
+  // Dynamic shared memory allocation size in bytes.
   size_t dyn_shmem_size{0};
+  /*!
+   * \param i The block dimension.
+   * \return i-th block dim
+   */
   inline size_t block_dim(size_t i) const { return work_size[i + 3]; }
+  /*!
+   * \param i The grid dimension.
+   * \return i-th grid dim
+   */
   inline size_t grid_dim(size_t i) const { return work_size[i]; }
 };
-
+/*! \brief Launch parameters configuration */
 class LaunchParamConfig {
  public:
   void Init(size_t base, const ffi::Array<ffi::String>& launch_param_tags) {
@@ -208,12 +265,14 @@ class LaunchParamConfig {
       }
     }
   }
+  // extract workload from arguments.
   ThreadWorkLoad Extract(ffi::PackedArgs args) const {
     ThreadWorkLoad w;
     std::fill(w.work_size, w.work_size + 6, 1);
     const TVMFFIAny* raw_args = reinterpret_cast<const TVMFFIAny*>(args.data());
 
     for (size_t i = 0; i < arg_index_map_.size(); ++i) {
+      // Dynamic shapes can result in 0 dim size. Guard to ensure that the dim size is at least 1.
       size_t size = static_cast<size_t>(raw_args[base_ + i].v_int64);
       if (size > 0) {
         w.work_size[arg_index_map_[i]] = size;
@@ -224,6 +283,7 @@ class LaunchParamConfig {
     }
     return w;
   }
+  // return the work dim
   size_t work_dim() const { return work_dim_; }
 
   bool use_programtic_dependent_launch() const { return use_programmatic_dependent_launch_; }
@@ -231,11 +291,17 @@ class LaunchParamConfig {
   bool use_cooperative_launch() const { return use_cooperative_launch_; }
 
  private:
+  /*! \brief base axis */
   size_t base_;
+  /*! \brief The worker dimension */
   size_t work_dim_;
+  /*! \brief The index mapping. */
   std::vector<uint32_t> arg_index_map_;
+  /*! \brief Whether or not use dynamic shared memory. */
   bool use_dyn_shared_memory_{false};
+  /*! \brief Whether or not use programmatic dependent launch. */
   bool use_programmatic_dependent_launch_{false};
+  /*! \brief Whether or not use cooperative launch. */
   bool use_cooperative_launch_{false};
 };
 

@@ -93,11 +93,6 @@ def _find_library_by_basename(
         pass
 
     dll_paths: list[Path] = []
-    if os.environ.get("TVM_LIBRARY_PATH", None):
-        dll_paths.extend(
-            Path(p.strip()) for p in os.environ["TVM_LIBRARY_PATH"].split(os.pathsep) if p.strip()
-        )
-
     if extra_lib_paths is not None:
         for i, p in enumerate(extra_lib_paths):
             if not isinstance(p, Path):

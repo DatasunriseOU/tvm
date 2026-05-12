@@ -137,33 +137,21 @@ class ExprOp:
         return _ffi_api.right_shift(other, self, None)  # type: ignore
 
     def __and__(self, other: PrimExpr) -> PrimExpr:
-        if isinstance(other, int):
-            other = const(other, self.dtype)
         return _ffi_api.bitwise_and(self, other, None)  # type: ignore
 
     def __rand__(self, other: PrimExpr) -> PrimExpr:
-        if isinstance(other, int):
-            other = const(other, self.dtype)
         return _ffi_api.bitwise_and(other, self, None)  # type: ignore
 
     def __or__(self, other: PrimExpr) -> PrimExpr:
-        if isinstance(other, int):
-            other = const(other, self.dtype)
         return _ffi_api.bitwise_or(self, other, None)  # type: ignore
 
     def __ror__(self, other: PrimExpr) -> PrimExpr:
-        if isinstance(other, int):
-            other = const(other, self.dtype)
         return _ffi_api.bitwise_or(other, self, None)  # type: ignore
 
     def __xor__(self, other: PrimExpr) -> PrimExpr:
-        if isinstance(other, int):
-            other = const(other, self.dtype)
         return _ffi_api.bitwise_xor(self, other, None)  # type: ignore
 
     def __rxor__(self, other: PrimExpr) -> PrimExpr:
-        if isinstance(other, int):
-            other = const(other, self.dtype)
         return _ffi_api.bitwise_xor(other, self, None)  # type: ignore
 
     def __invert__(self) -> PrimExpr:
