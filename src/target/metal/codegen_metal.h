@@ -58,13 +58,17 @@ class CodeGenMetal final : public CodeGenC {
   void VisitExpr_(const BroadcastNode* op, std::ostream& os) final;  // NOLINT(*)
   void VisitExpr_(const CallNode* op, std::ostream& os) final;       // NOLINT(*)
   void VisitExpr_(const FloatImmNode* op, std::ostream& os) final;   // NOLINT(*)
+  std::string CastFromTo(std::string value, DataType from, DataType target) final;
 
   // reuse parent's function.
   using CodeGenC::PrintType;
 
  private:
+  void EmitBFloat16Prelude();
+
   std::unordered_map<const VarNode*, std::string> simdgroup_dtype_;
   std::unordered_map<const VarNode*, IntImm> unroll_factor_;
+  bool emitted_bfloat16_prelude_{false};
   int thread_index_bits_{32};
   int thread_work_dim_{0};
   Target target_;
