@@ -1,1 +1,4 @@
 jvm/*
+__pycache__/
+*.pyc
+*.pyo
