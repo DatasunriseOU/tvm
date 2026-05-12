@@ -14,17 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-"""Structured error classes in TVM.
-
-Each error class takes an error message as its input.
-See the example sections for suggested message conventions.
-To make the code more readable, we recommended developers to
-copy the examples and raise errors with the same message convention.
-
-.. note::
-
-    Please also refer to :ref:`error-handling-guide`.
-"""
+"""Structured error classes in TVM."""
 
 from tvm_ffi import register_error
 
@@ -35,20 +25,7 @@ class TVMError(RuntimeError):
 
 @register_error
 class InternalError(TVMError):
-    """Internal error in the system.
-
-    Examples
-    --------
-    .. code :: c++
-
-        // Example code C++
-        LOG(FATAL) << "InternalError: internal error detail.";
-
-    .. code :: python
-
-        # Example code in python
-        raise InternalError("internal error detail")
-    """
+    """Internal error in the system."""
 
 
 @register_error
@@ -68,63 +45,24 @@ class OpError(TVMError):
 
 @register_error
 class OpNotImplemented(OpError, NotImplementedError):
-    """Operator is not implemented.
-
-    Example
-    -------
-    .. code:: python
-
-        raise OpNotImplemented(
-            "Operator {} is not supported in {} frontend".format(
-                missing_op, frontend_name))
-    """
+    """Operator is not implemented."""
 
 
 @register_error
 class OpAttributeRequired(OpError, AttributeError):
-    """Required attribute is not found.
-
-    Example
-    -------
-    .. code:: python
-
-        raise OpAttributeRequired(
-            "Required attribute {} not found in operator {}".format(
-                attr_name, op_name))
-    """
+    """Required attribute is not found."""
 
 
 @register_error
 class OpAttributeInvalid(OpError, AttributeError):
-    """Attribute value is invalid when taking in a frontend operator.
-
-    Example
-    -------
-    .. code:: python
-
-        raise OpAttributeInvalid(
-            "Value {} in attribute {} of operator {} is not valid".format(
-                value, attr_name, op_name))
-    """
+    """Attribute value is invalid when taking in a frontend operator."""
 
 
 @register_error
 class OpAttributeUnImplemented(OpError, NotImplementedError):
-    """Attribute is not supported in a certain frontend.
-
-    Example
-    -------
-    .. code:: python
-
-        raise OpAttributeUnImplemented(
-            "Attribute {} is not supported in operator {}".format(
-                attr_name, op_name))
-    """
+    """Attribute is not supported in a certain frontend."""
 
 
 @register_error
 class DiagnosticError(TVMError):
-    """Error diagnostics were reported during the execution of a pass.
-
-    See the configured diagnostic renderer for detailed error information.
-    """
+    """Error diagnostics were reported during the execution of a pass."""

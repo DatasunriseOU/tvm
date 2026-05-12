@@ -33,6 +33,19 @@ from .buffer import Buffer
 from .expr import BufferLoad, Call, CommReducer, IntImm, PrimExprWithOp, Var
 
 
+def _normalize_call_annotations(annotations):
+    if annotations is None:
+        return None
+    normalized = {}
+    for key, value in annotations.items():
+        if isinstance(value, bool):
+            value = IntImm("bool", value)
+        elif isinstance(value, int):
+            value = IntImm("int32", value)
+        normalized[key] = value
+    return normalized
+
+
 def _pack_buffer(buf, span=None):
     """Build intrinsics that packs the buffer."""
     shape = Call("handle", "tirx.tvm_stack_make_shape", buf.shape, span)
@@ -182,20 +195,36 @@ def call_intrin(dtype, func_name, *args, span=None, annotations=None, **kwargs):
         The location of this operator in the source code.
 
     annotations : Optional[Mapping]
-        CPPMEGA: re-accepted kwarg dropped from apache/tvm latest. Currently
-        ignored on the Python side (the apache 4-arg Call FFI ctor doesn't
-        accept it). The C++ ``tirx::CallNode`` field is preserved via the
-        ``3rdparty/tvm/include/tvm/tirx/expr.h`` patch for direct C++ callers.
+        Optional per-call annotations preserved on the Call node.
 
     Returns
     -------
     call : PrimExpr
         The call expression.
     """
-    # CPPMEGA: silently accept and drop ``annotations`` / extra kwargs so that
-    # TileLang call sites (tilelang/language/tir/op.py) keep working after
-    # apache/tvm dropped the kwarg from the Python wrapper.
-    del annotations, kwargs
+    del kwargs
+    annotations = _normalize_call_annotations(annotations)
+    if annotations:
+        if isinstance(func_name, str):
+            if func_name.startswith("tir.") and not func_name.startswith("tirx."):
+                func_name = "tirx." + func_name[len("tir.") :]
+            if not func_name.startswith("tirx."):
+                raise ValueError(
+                    (
+                        "Cannot handle str op argument %s. This function only handles str "
+                        + "argument with the tirx namespace. If you are "
+                        + "certain about the intrinsic name, pass in Op.get(name) instead"
+                    )
+                    % func_name
+                )
+            func_name = Op.get(func_name)
+        return tvm_ffi.get_global_func("tirx.CallWithAnnotations")(
+            dtype,
+            func_name,
+            args,
+            annotations,
+            span,
+        )
     return Call(dtype, func_name, args, span)
 
 
