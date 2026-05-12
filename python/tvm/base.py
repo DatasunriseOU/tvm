@@ -1,0 +1,70 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+# coding: utf-8
+# pylint: disable=invalid-name, import-outside-toplevel
+# ruff: noqa: F401
+"""Base library for TVM."""
+
+import os
+import sys
+
+from . import libinfo
+
+if not (sys.version_info[0] >= 3 and sys.version_info[1] >= 9):
+    PY3STATEMENT = "The minimal Python requirement is Python 3.9"
+    raise Exception(PY3STATEMENT)
+
+_extra_lib_paths = libinfo.package_lib_paths()
+_LIB_RUNTIME = libinfo.load_lib_ctypes(
+    "tvm", "tvm_runtime", "RTLD_GLOBAL", extra_lib_paths=_extra_lib_paths
+)
+
+_RUNTIME_ONLY = libinfo.use_runtime_lib()
+if _RUNTIME_ONLY:
+    _LIB = _LIB_RUNTIME
+else:
+    try:
+        _LIB = libinfo.load_lib_ctypes(
+            "tvm", "tvm_compiler", "RTLD_LOCAL", extra_lib_paths=_extra_lib_paths
+        )
+    except RuntimeError:
+        _LIB = _LIB_RUNTIME
+        _RUNTIME_ONLY = True
+
+try:
+    import readline  # pylint: disable=unused-import
+except ImportError:
+    pass
+
+__version__ = libinfo.__version__
+
+if _RUNTIME_ONLY:
+    from tvm_ffi import registry as _tvm_ffi_registry
+
+    _tvm_ffi_registry._SKIP_UNKNOWN_OBJECTS = True
+
+_FFI_MODE = os.environ.get("TVM_FFI", "auto")
+
+if _FFI_MODE == "ctypes":
+    raise ImportError("We have phased out ctypes support in favor of cython on wards")
+
+
+def py_str(x):
+    return x.decode("utf-8")
+
+
+TVMError = Exception
