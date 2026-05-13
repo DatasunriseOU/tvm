@@ -383,7 +383,6 @@ class PyStmtExprVisitor:
         op : Bind
             The Bind node to be visited.
         """
-        print("visit_bind_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_for_(self, op: For) -> None:
@@ -396,7 +395,6 @@ class PyStmtExprVisitor:
         op : For
             The For to be visited.
         """
-        print("visit_for_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_while_(self, op: While) -> None:
