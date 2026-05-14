@@ -357,7 +357,6 @@ class PyStmtExprVisitor:
         op : AttrStmt
             The AttrStmt to be visited.
         """
-        print("visit_attr_stmt_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_if_then_else_(self, op: IfThenElse) -> None:
@@ -370,7 +369,6 @@ class PyStmtExprVisitor:
         op : IfThenElse
             The IfThenElse to be visited.
         """
-        print("visit_if_then_else_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_bind_(self, op: Bind) -> None:
@@ -407,7 +405,6 @@ class PyStmtExprVisitor:
         op : While
             The While to be visited.
         """
-        print("visit_while_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_alloc_buffer_(self, op: AllocBuffer) -> None:
@@ -432,7 +429,6 @@ class PyStmtExprVisitor:
         op : DeclBuffer
             The DeclBuffer to be visited.
         """
-        print("visit_decl_buffer_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_buffer_store_(self, op: BufferStore) -> None:
@@ -445,7 +441,6 @@ class PyStmtExprVisitor:
         op : BufferStore
             The BufferStore to be visited.
         """
-        print("visit_buffer_store_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_assert_stmt_(self, op: AssertStmt) -> None:
@@ -458,7 +453,6 @@ class PyStmtExprVisitor:
         op : AssertStmt
             The AssertStmt to be visited.
         """
-        print("visit_assert_stmt_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_seq_stmt_(self, op: SeqStmt) -> None:
@@ -471,7 +465,6 @@ class PyStmtExprVisitor:
         op : SeqStmt
             The SeqStmt to be visited.
         """
-        print("visit_seq_stmt_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_evaluate_(self, op: Evaluate) -> None:
@@ -484,7 +477,6 @@ class PyStmtExprVisitor:
         op : Evaluate
             The Evaluate to be visited.
         """
-        print("visit_evaluate_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_sblock_(self, op: SBlock) -> None:
@@ -497,7 +489,6 @@ class PyStmtExprVisitor:
         op : SBlock
             The SBlock to be visited.
         """
-        print("visit_sblock_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_sblock_realize_(self, op: SBlockRealize) -> None:
@@ -510,7 +501,6 @@ class PyStmtExprVisitor:
         op : SBlockRealize
             The BlockRealize to be visited.
         """
-        print("visit_sblock_realize_", op)
         _ffi_api.PyStmtExprVisitorDefaultVisitStmt(self._outer(), op)  # type: ignore
 
     def visit_var_(self, op: Var) -> None:
