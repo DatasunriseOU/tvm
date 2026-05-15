@@ -77,6 +77,10 @@ class MetalModuleNode final : public ffi::ModuleObj {
 
   ffi::Optional<ffi::Function> GetFunction(const ffi::String& name) final;
 
+  ffi::Optional<FunctionInfo> GetFunctionInfo(const std::string& name) const {
+    return fmap_.Get(name);
+  }
+
   ffi::Bytes SaveToBytes() const final {
     // 3 fields [fmt][fmap][smap].  Source map is in-memory inspection only
     // and is NEVER serialized — matches the cross-backend rule.
@@ -224,9 +228,10 @@ class MetalWrappedFunc {
       metal::MetalThreadEntry::ExternalCommandBufferState external_state =
           t->GetExternalCommandBufferState(device_id);
       id<MTLCommandBuffer> external_command_buffer = external_state.command_buffer;
+      id<MTLComputeCommandEncoder> external_compute_encoder = external_state.compute_encoder;
       metal::Stream* stream = nullptr;
 
-      if (external_command_buffer == nil) {
+      if (external_command_buffer == nil && external_compute_encoder == nil) {
         // obtain the stream
         stream =
             metal::MetalWorkspace::Global()->CastStreamOrGetDefault(t->stream[device_id], device_id);
@@ -243,7 +248,9 @@ class MetalWrappedFunc {
       auto maxTotalThreadsPerThreadgroup = scache_[device_id].maxTotalThreadsPerThreadgroup;
       TVM_FFI_ICHECK_LE(blockSize, maxTotalThreadsPerThreadgroup);
       id<MTLComputeCommandEncoder> encoder;
-      if (external_command_buffer != nil) {
+      if (external_compute_encoder != nil) {
+        encoder = external_compute_encoder;
+      } else if (external_command_buffer != nil) {
         if (external_state.wait_event != nil) {
           [external_command_buffer encodeWaitForEvent:external_state.wait_event
                                                 value:external_state.wait_value];
@@ -300,6 +307,153 @@ class MetalWrappedFunc {
   LaunchParamConfig launch_param_config_;
 };
 
+class MetalDirectLaunchHandle {
+ public:
+  void Init(MetalModuleNode* m, ffi::ObjectPtr<ffi::Object> sptr, const std::string& func_name,
+            FunctionInfo info) {
+    w_ = metal::MetalWorkspace::Global();
+    m_ = m;
+    sptr_ = std::move(sptr);
+    func_name_ = func_name;
+    num_buffer_args_ = NumBufferArgs(info->arg_types);
+    TVM_FFI_ICHECK_EQ(num_buffer_args_, info->arg_types.size())
+        << "TVM Metal direct launch supports buffer-only kernels; "
+        << func_name << " has " << (info->arg_types.size() - num_buffer_args_)
+        << " non-buffer arguments";
+    std::fill(scache_.begin(), scache_.end(), (id<MTLComputePipelineState>)nil);
+    InitLaunchParamMap(info->launch_param_tags);
+    metal::MetalThreadEntry* t = metal::MetalThreadEntry::ThreadLocal();
+    int dev_id = t->device.device_id;
+    scache_[dev_id] = m_->GetPipelineState(dev_id, func_name_);
+  }
+
+  void Launch(void** buffers, int32_t num_buffers, const int64_t* launch_args,
+              int32_t num_launch_args) const {
+    AUTORELEASEPOOL {
+      TVM_FFI_ICHECK_EQ(static_cast<size_t>(num_buffers), num_buffer_args_);
+      TVM_FFI_ICHECK(launch_args != nullptr || num_launch_args == 0);
+      metal::MetalThreadEntry* t = metal::MetalThreadEntry::ThreadLocal();
+      int device_id = t->device.device_id;
+      metal::MetalThreadEntry::ExternalCommandBufferState external_state =
+          t->GetExternalCommandBufferState(device_id);
+      id<MTLCommandBuffer> external_command_buffer = external_state.command_buffer;
+      id<MTLComputeCommandEncoder> external_compute_encoder = external_state.compute_encoder;
+      metal::Stream* stream = nullptr;
+
+      if (external_command_buffer == nil && external_compute_encoder == nil) {
+        stream =
+            metal::MetalWorkspace::Global()->CastStreamOrGetDefault(t->stream[device_id], device_id);
+        if (stream->HasErrorHappened()) return;
+      }
+
+      if (scache_[device_id] == nil) {
+        scache_[device_id] = m_->GetPipelineState(device_id, func_name_);
+      }
+      ThreadWorkLoad wl = ExtractWorkLoad(launch_args, num_launch_args);
+      int blockSize = wl.block_dim(0) * wl.block_dim(1) * wl.block_dim(2);
+      auto maxTotalThreadsPerThreadgroup = scache_[device_id].maxTotalThreadsPerThreadgroup;
+      TVM_FFI_ICHECK_LE(blockSize, maxTotalThreadsPerThreadgroup);
+      id<MTLComputeCommandEncoder> encoder;
+      if (external_compute_encoder != nil) {
+        encoder = external_compute_encoder;
+      } else if (external_command_buffer != nil) {
+        if (external_state.wait_event != nil) {
+          [external_command_buffer encodeWaitForEvent:external_state.wait_event
+                                                value:external_state.wait_value];
+        }
+        encoder = [external_command_buffer computeCommandEncoder];
+        TVM_FFI_ICHECK(encoder != nil)
+            << "Failed to create Metal compute encoder on external command buffer";
+      } else {
+        encoder = stream->GetPendingComputeEncoder(func_name_);
+      }
+      [encoder setComputePipelineState:scache_[device_id]];
+      for (size_t i = 0; i < num_buffer_args_; ++i) {
+        [encoder setBuffer:(id<MTLBuffer>)(buffers[i]) offset:0 atIndex:i];
+      }
+      MTLSize dimGrid = MTLSizeMake(wl.grid_dim(0), wl.grid_dim(1), wl.grid_dim(2));
+      MTLSize dimBlock = MTLSizeMake(wl.block_dim(0), wl.block_dim(1), wl.block_dim(2));
+      [encoder dispatchThreadgroups:dimGrid threadsPerThreadgroup:dimBlock];
+      if (external_command_buffer != nil) {
+        [encoder endEncoding];
+        if (external_state.signal_event != nil) {
+          [external_command_buffer encodeSignalEvent:external_state.signal_event
+                                               value:external_state.signal_value];
+        }
+      }
+    };
+  }
+
+ private:
+  void InitLaunchParamMap(const ffi::Array<ffi::String>& launch_param_tags) {
+    expected_launch_args_ = 0;
+    for (size_t i = 0; i < launch_param_tags.size(); ++i) {
+      std::string tag(launch_param_tags[i]);
+      if (tag == launch_param::kUseDynamicSharedMemoryTag) {
+        TVM_FFI_ICHECK_EQ(i, launch_param_tags.size() - 1)
+            << "kUseDynamicSharedMemoryTag should be the last tag in launch_param_tags.";
+        use_dyn_shared_memory_ = true;
+        ++expected_launch_args_;
+      } else if (tag == launch_param::kUseProgramaticDependentLaunch) {
+        TVM_FFI_THROW(InternalError)
+            << "TVM Metal direct launch does not support programmatic dependent launch";
+      } else if (tag == launch_param::kUseCooperativeLaunch) {
+        TVM_FFI_THROW(InternalError)
+            << "TVM Metal direct launch does not support cooperative launch";
+      } else {
+        ThreadScope ts = ThreadScope::Create(tag);
+        launch_arg_index_map_.push_back(ts.rank * 3 + ts.dim_index);
+        ++expected_launch_args_;
+      }
+    }
+  }
+
+  ThreadWorkLoad ExtractWorkLoad(const int64_t* launch_args, int32_t num_launch_args) const {
+    TVM_FFI_ICHECK_EQ(static_cast<size_t>(num_launch_args), expected_launch_args_);
+    ThreadWorkLoad w;
+    std::fill(w.work_size, w.work_size + 6, 1);
+    size_t arg_pos = 0;
+    for (uint32_t index : launch_arg_index_map_) {
+      size_t size = static_cast<size_t>(launch_args[arg_pos++]);
+      if (size > 0) {
+        w.work_size[index] = size;
+      }
+    }
+    if (use_dyn_shared_memory_) {
+      w.dyn_shmem_size = static_cast<size_t>(launch_args[arg_pos++]);
+    }
+    return w;
+  }
+
+  metal::MetalWorkspace* w_{nullptr};
+  MetalModuleNode* m_{nullptr};
+  ffi::ObjectPtr<ffi::Object> sptr_;
+  std::string func_name_;
+  size_t num_buffer_args_{0};
+  mutable std::array<id<MTLComputePipelineState>, kMetalMaxNumDevice> scache_;
+  std::vector<uint32_t> launch_arg_index_map_;
+  size_t expected_launch_args_{0};
+  bool use_dyn_shared_memory_{false};
+};
+
+static thread_local std::string metal_direct_launch_last_error;
+
+static void SetMetalDirectLaunchLastError(std::string error) {
+  metal_direct_launch_last_error = std::move(error);
+}
+
+static std::string CurrentExceptionMessage() {
+  try {
+    throw;
+  } catch (const tvm::ffi::Error& exc) {
+    return exc.FullMessage();
+  } catch (const std::exception& exc) {
+    return exc.what();
+  } catch (...) {
+    return "unknown exception";
+  }
+}
+
 ffi::Optional<ffi::Function> MetalModuleNode::GetFunction(const ffi::String& name) {
   ffi::Function ret;
   AUTORELEASEPOOL {
@@ -317,6 +471,55 @@ ffi::Optional<ffi::Function> MetalModuleNode::GetFunction(const ffi::String& nam
     ret = PackFuncNonBufferArg(f, info->arg_types);
   };
   return ret;
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT void* TVMMetalCreateDirectLaunchHandle(
+    TVMFFIObjectHandle module_handle, const char* func_name) {
+  SetMetalDirectLaunchLastError("");
+  try {
+    TVM_FFI_ICHECK(module_handle != nullptr);
+    TVM_FFI_ICHECK(func_name != nullptr);
+    auto* module_obj = ffi::details::ObjectUnsafe::RawObjectPtrFromUnowned<ffi::ModuleObj>(
+        static_cast<TVMFFIObject*>(module_handle));
+    TVM_FFI_ICHECK(module_obj != nullptr);
+    TVM_FFI_ICHECK(std::string(module_obj->kind()) == "metal")
+        << "TVM Metal direct launch requires a metal module, got " << module_obj->kind();
+    auto* metal_module = static_cast<MetalModuleNode*>(module_obj);
+    auto opt_info = metal_module->GetFunctionInfo(func_name);
+    TVM_FFI_ICHECK(opt_info.has_value())
+        << "Cannot create TVM Metal direct launch handle for missing function " << func_name;
+    auto sptr = ffi::details::ObjectUnsafe::ObjectPtrFromUnowned<ffi::Object>(
+        static_cast<TVMFFIObject*>(module_handle));
+    auto* handle = new MetalDirectLaunchHandle();
+    handle->Init(metal_module, std::move(sptr), func_name, opt_info.value());
+    return handle;
+  } catch (...) {
+    SetMetalDirectLaunchLastError(CurrentExceptionMessage());
+    return nullptr;
+  }
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT void TVMMetalReleaseDirectLaunchHandle(void* handle) {
+  delete static_cast<MetalDirectLaunchHandle*>(handle);
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT int TVMMetalDirectLaunch(
+    void* handle, void** buffers, int32_t num_buffers, const int64_t* launch_args,
+    int32_t num_launch_args) {
+  SetMetalDirectLaunchLastError("");
+  try {
+    TVM_FFI_ICHECK(handle != nullptr);
+    static_cast<MetalDirectLaunchHandle*>(handle)->Launch(
+        buffers, num_buffers, launch_args, num_launch_args);
+    return 0;
+  } catch (...) {
+    SetMetalDirectLaunchLastError(CurrentExceptionMessage());
+    return -1;
+  }
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT const char* TVMMetalDirectLaunchLastError() {
+  return metal_direct_launch_last_error.c_str();
 }
 
 static ffi::Module MetalModuleCreateImpl(ffi::Map<ffi::String, ffi::Bytes> smap, ffi::String fmt,

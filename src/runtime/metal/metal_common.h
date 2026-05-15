@@ -27,6 +27,7 @@
 #import <Metal/MTLBlitCommandEncoder.h>
 #import <Metal/MTLBuffer.h>
 #import <Metal/MTLCommandBuffer.h>
+#import <Metal/MTLComputeCommandEncoder.h>
 #import <Metal/MTLCommandQueue.h>
 #import <Metal/MTLDevice.h>
 #import <Metal/MTLLibrary.h>
@@ -350,6 +351,7 @@ class MetalThreadEntry {
  public:
   struct ExternalCommandBufferState {
     id<MTLCommandBuffer> command_buffer = nil;
+    id<MTLComputeCommandEncoder> compute_encoder = nil;
     id<MTLSharedEvent> wait_event = nil;
     uint64_t wait_value = 0;
     id<MTLSharedEvent> signal_event = nil;
@@ -447,6 +449,8 @@ class MetalThreadEntry {
   void SetExternalCommandBufferWithEvents(int device_id, id<MTLCommandBuffer> command_buffer,
                                           id<MTLSharedEvent> wait_event, uint64_t wait_value,
                                           id<MTLSharedEvent> signal_event, uint64_t signal_value);
+  void SetExternalComputeCommandEncoder(int device_id,
+                                        id<MTLComputeCommandEncoder> compute_encoder);
   void ClearExternalCommandBuffer(int device_id);
   id<MTLCommandBuffer> GetExternalCommandBuffer(int device_id);
   ExternalCommandBufferState GetExternalCommandBufferState(int device_id);
