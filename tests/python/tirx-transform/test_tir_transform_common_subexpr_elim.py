@@ -440,8 +440,8 @@ def test_if_condition():
 
 
 # =====================================================================
-# T13: Cannot-lift -- expression containing Call
-# Function calls cannot be lifted.
+# T13: Cannot-lift -- expression containing impure Call
+# Impure function calls cannot be lifted.
 # =====================================================================
 def test_cannot_lift_call():
     @tvm.script.ir_module
@@ -463,7 +463,33 @@ def test_cannot_lift_call():
 
 
 # =====================================================================
-# T14: No single-use binding
+# T14: Pure call CSE
+# Pure function calls can be deduplicated.  This covers lowered scalar math
+# intrinsics such as Metal's tanh lowering, where repeated pure exp/select
+# expressions should not be emitted multiple times.
+# =====================================================================
+def test_lift_pure_call():
+    @tvm.script.ir_module
+    class Before:
+        @T.prim_func
+        def main(B: T.Buffer((50,), "int32"), x: T.int32):
+            B[0] = T.call_pure_extern("int32", "my_pure", x) + 1
+            B[1] = T.call_pure_extern("int32", "my_pure", x) + 1
+
+    @tvm.script.ir_module
+    class Expected:
+        @T.prim_func
+        def main(B: T.Buffer((50,), "int32"), x: T.int32):
+            cse_v1 = T.bind(T.call_pure_extern("int32", "my_pure", x) + 1)
+            B[0] = cse_v1
+            B[1] = cse_v1
+
+    after = tvm.tirx.transform.CommonSubexprElim()(Before)
+    tvm.ir.assert_structural_equal(after, Expected)
+
+
+# =====================================================================
+# T15: No single-use binding
 # When all occurrences of a sub-expression are inside a deeper
 # expression that is also CSE'd, the sub-expression should NOT get
 # its own binding (it would be used only once in the parent's value).
@@ -768,6 +794,7 @@ if __name__ == "__main__":
     test_multi_independent()
     test_if_condition()
     test_cannot_lift_call()
+    test_lift_pure_call()
     test_no_single_use_binding()
     test_for_extent_lift()
     test_loop_var_expr_stays_inside()

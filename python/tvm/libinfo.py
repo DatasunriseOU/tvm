@@ -48,6 +48,7 @@ def package_lib_paths() -> list[Path]:
         pkg / "lib",  # wheel layout
         pkg.parent.parent / "build" / "lib",  # dev: <worktree>/build/lib
         pkg.parent.parent / "lib",  # dev: <worktree>/lib
+        pkg.parent.parent.parent.parent / "lib",  # tilelang wheel layout
     ]
 
 
@@ -373,17 +374,34 @@ def find_include_path(name=None, search_path=None, optional=False):
             os.path.join(p, "3rdparty", "tvm-ffi", "3rdparty", "dlpack", "include")
             for p in header_path
         ]
+        tvm_ffi_package_include_path = []
+        try:
+            import tvm_ffi.libinfo as tvm_ffi_libinfo  # pylint: disable=import-outside-toplevel
+
+            tvm_ffi_package_include_path = list(tvm_ffi_libinfo.include_paths())
+        except Exception:
+            tvm_ffi_package_include_path = []
 
         # try to find include path
         include_found = [p for p in tvm_include_path if os.path.exists(p) and os.path.isdir(p)]
         include_found += [p for p in tvm_ffi_include_path if os.path.exists(p) and os.path.isdir(p)]
         include_found += [p for p in dlpack_include_path if os.path.exists(p) and os.path.isdir(p)]
+        include_found += [
+            p for p in tvm_ffi_package_include_path if os.path.exists(p) and os.path.isdir(p)
+        ]
 
     if not include_found:
         message = (
             "Cannot find the files.\n"
             + "List of candidates:\n"
-            + str("\n".join(tvm_include_path + dlpack_include_path))
+            + str(
+                "\n".join(
+                    tvm_include_path
+                    + tvm_ffi_include_path
+                    + dlpack_include_path
+                    + tvm_ffi_package_include_path
+                )
+            )
         )
         if not optional:
             raise RuntimeError(message)

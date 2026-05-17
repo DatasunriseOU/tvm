@@ -47,7 +47,7 @@
  * -----------------
  * An expression is eligible for CSE if:
  *   - It is not a leaf (Var, IntImm, FloatImm, StringImm).
- *   - It does not contain Call or BufferLoad (side-effects / memory dependence).
+ *   - It does not contain impure Call or BufferLoad (side-effects / memory dependence).
  *   - It is not Ramp or Broadcast (hardware-specific vector ops).
  *   - It is not bool-typed. Boolean predicates are kept inline because the
  *     consumer (if / Select / assert) reads more clearly with the condition
@@ -249,14 +249,19 @@ class CSEPlanner : public StmtExprVisitor {
   /*!
    * \brief Check if an expression node type is forbidden for CSE.
    *
-   * Call nodes may have side effects. BufferLoad nodes depend on memory
-   * state and cannot be safely hoisted or deduplicated.
+   * Impure call nodes may have side effects. BufferLoad nodes depend on
+   * memory state and cannot be safely hoisted or deduplicated. Pure calls,
+   * such as lowered scalar math intrinsics, are eligible for CSE.
    *
    * \param expr The expression to check.
    * \return true if the expression is a Call or BufferLoad.
    */
   static bool IsForbiddenNode(const PrimExpr& expr) {
-    return (expr.as<CallNode>() != nullptr || expr.as<BufferLoadNode>() != nullptr);
+    if (expr.as<BufferLoadNode>() != nullptr) return true;
+    if (expr.as<CallNode>() != nullptr) {
+      return SideEffect(expr) > CallEffectKind::kPure;
+    }
+    return false;
   }
 
   /*!
@@ -264,7 +269,7 @@ class CSEPlanner : public StmtExprVisitor {
    *
    * An expression is eligible if it represents a non-trivial pure computation:
    *   - Not a leaf (Var, IntImm, FloatImm, StringImm — no computation to save).
-   *   - Not a Call or BufferLoad (side effects / memory dependence).
+   *   - Not an impure Call or BufferLoad (side effects / memory dependence).
    *   - Not Ramp or Broadcast (hardware-specific vector construction).
    *   - Does not transitively contain any forbidden node.
    *   - Is not bool-typed (predicates are kept inline for readability and
