@@ -106,6 +106,49 @@ def test_bf16_simple_store_will_legalize():
     tvm.ir.assert_structural_equal(after_storage, BindTarget(target)(after_storage_legalize()))
 
 
+def test_bf16_root_alloc_buffer_will_storage_legalize():
+    def get_before():
+        @tvm.script.ir_module
+        class Before:
+            @T.prim_func
+            def main(
+                Aptr: T.handle("bfloat16"),
+                Cptr: T.handle("bfloat16"),
+            ):
+                T.func_attr({"global_symbol": "main"})
+                A = T.decl_buffer((4,), "bfloat16", data=Aptr)
+                C = T.decl_buffer((4,), "bfloat16", data=Cptr)
+                B = T.alloc_buffer((4,), "bfloat16")
+                for i in T.grid(4):
+                    B[i] = A[i]
+                    C[i] = B[i]
+
+        return Before
+
+    def after_storage_legalize():
+        @tvm.script.ir_module
+        class After:
+            @T.prim_func
+            def main(
+                Aptr: T.handle("uint16"),
+                Cptr: T.handle("uint16"),
+            ):
+                T.func_attr({"global_symbol": "main"})
+                A = T.decl_buffer((4,), "uint16", data=Aptr)
+                C = T.decl_buffer((4,), "uint16", data=Cptr)
+                B = T.alloc_buffer((4,), "uint16")
+                for i in T.grid(4):
+                    B[i] = A[i]
+                    C[i] = B[i]
+
+        return After
+
+    target = Target("nvidia/geforce-rtx-2080-ti")
+    before = BindTarget(target)(get_before())
+    after_storage = tvm.tirx.transform.BF16StorageLegalize()(before)
+    tvm.ir.assert_structural_equal(after_storage, BindTarget(target)(after_storage_legalize()))
+
+
 def test_bf16_storage_compute_scope_will_legalize():
     def get_before():
         @tvm.script.ir_module

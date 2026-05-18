@@ -524,10 +524,11 @@ class StorageLegalizer : public StmtExprMutator {
   }
 
   Stmt VisitStmt_(const AllocBufferNode* op) final {
-    Buffer buf = GetRemappedBuffer(op->buffer);
-    // in a rare case the buffer didn't get remapped
-    // because the original var is not bfloat*
-    // force remap here
+    Buffer buf = op->buffer;
+    auto buf_it = buffer_remap_.find(buf);
+    if (buf_it != buffer_remap_.end()) {
+      buf = buf_it->second;
+    }
     if (MatchDType(buf->dtype)) {
       DataType new_dtype = GetStorageUIntDType(buf->dtype);
       ffi::String storage_scope = "global";
@@ -540,6 +541,8 @@ class StorageLegalizer : public StmtExprMutator {
                    buf->data_alignment, buf->offset_factor, buf->buffer_type, buf->axis_separators,
                    buf->span);
       buffer_remap_[op->buffer] = buf;
+    } else if (buf_it == buffer_remap_.end()) {
+      buf = GetRemappedBuffer(op->buffer);
     }
     if (buf.same_as(op->buffer)) {
       return ffi::GetRef<Stmt>(op);
@@ -566,6 +569,29 @@ class StorageLegalizer : public StmtExprMutator {
     } else {
       return DeclBuffer(buf, op->span);
     }
+  }
+
+  Buffer VisitBufferDef(const Buffer& buffer, bool alloc_data) final {
+    Buffer buf = StmtExprMutator::VisitBufferDef(buffer, alloc_data);
+    if (!alloc_data || !MatchDType(buf->dtype)) {
+      return buf;
+    }
+
+    DataType new_dtype = GetStorageUIntDType(buf->dtype);
+    ffi::String storage_scope = "global";
+    if (auto* ptr_type = buf->data->type_annotation.as<PointerTypeNode>()) {
+      storage_scope = ptr_type->storage_scope;
+    }
+    Var new_data = Var(buf->data->name_hint, PointerType(PrimType(new_dtype), storage_scope));
+    var_remap_[buf->data] = new_data;
+    Buffer new_buf(new_data, new_dtype, buf->shape, buf->strides, buf->elem_offset, buf->name,
+                   buf->data_alignment, buf->offset_factor, buf->buffer_type,
+                   buf->axis_separators, buf->span);
+    buffer_remap_[buffer] = new_buf;
+    if (!buf.same_as(buffer)) {
+      buffer_remap_[buf] = new_buf;
+    }
+    return new_buf;
   }
 
   PrimExpr VisitExpr_(const LetNode* op) final {
