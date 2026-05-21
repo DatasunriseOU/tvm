@@ -65,5 +65,9 @@ def register_tag(name: str, config: dict[str, Any], override: bool = False) -> T
         })
     """
     if hasattr(_ffi_api, "TargetTagAddTag"):
-        return _ffi_api.TargetTagAddTag(name, config, override)
+        effective_override = override
+        if not effective_override:
+            tags = list_tags()
+            effective_override = tags is not None and name in tags
+        return _ffi_api.TargetTagAddTag(name, config, effective_override)
     return None

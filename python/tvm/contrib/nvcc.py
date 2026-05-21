@@ -769,7 +769,7 @@ def find_nvshmem_paths() -> tuple[str, str]:
     raise RuntimeError("\n".join(error_message))
 
 
-@tvm_ffi.register_global_func
+@tvm_ffi.register_global_func("tvm_callback_cuda_compile", override=True)
 def tvm_callback_cuda_compile(code):
     """
     Compile CUDA code using the configured backend (nvcc or nvrtc).
@@ -810,7 +810,7 @@ def tvm_callback_cuda_compile(code):
     raise ValueError(f"Invalid TVM_CUDA_COMPILE_MODE: {compiler}. Expected 'nvcc' or 'nvrtc'.")
 
 
-@tvm_ffi.register_global_func("tvm_callback_libdevice_path")
+@tvm_ffi.register_global_func("tvm_callback_libdevice_path", override=True)
 def find_libdevice_path(arch):
     """Utility function to find libdevice
 
@@ -875,7 +875,7 @@ def callback_libdevice_path(arch):
         return ""
 
 
-@tvm_ffi.register_global_func("tvm.contrib.nvcc.get_compute_version")
+@tvm_ffi.register_global_func("tvm.contrib.nvcc.get_compute_version", override=True)
 def get_target_compute_version(target=None):
     """Utility function to get compute capability of compilation target.
 
@@ -1021,7 +1021,7 @@ def have_cudagraph():
         return False
 
 
-@tvm_ffi.register_global_func("tvm.contrib.nvcc.supports_bf16")
+@tvm_ffi.register_global_func("tvm.contrib.nvcc.supports_bf16", override=True)
 def have_bf16(compute_version):
     """Either bf16 support is provided in the compute capability or not
 
@@ -1037,7 +1037,7 @@ def have_bf16(compute_version):
     return False
 
 
-@tvm_ffi.register_global_func("tvm.contrib.nvcc.supports_fp8")
+@tvm_ffi.register_global_func("tvm.contrib.nvcc.supports_fp8", override=True)
 def have_fp8(compute_version):
     """Whether fp8 support is provided in the specified compute capability or not
 
@@ -1055,7 +1055,7 @@ def have_fp8(compute_version):
     return False
 
 
-@tvm_ffi.register_global_func("tvm.contrib.nvcc.supports_fp4")
+@tvm_ffi.register_global_func("tvm.contrib.nvcc.supports_fp4", override=True)
 def have_fp4(compute_version):
     """Whether fp4 support is provided in the specified compute capability or not
 

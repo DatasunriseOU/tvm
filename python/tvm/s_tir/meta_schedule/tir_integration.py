@@ -163,7 +163,7 @@ def tune_tir(  # pylint: disable=too-many-locals
     )
 
 
-@register_global_func("tvm.s_tir.meta_schedule.tune_tir")
+@register_global_func("tvm.s_tir.meta_schedule.tune_tir", override=True)
 def _tune_tir(
     mod: ir.IRModule | tirx.PrimFunc,
     target: str | Target,

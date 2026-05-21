@@ -21,7 +21,7 @@ from tvm_ffi import register_global_func
 from .codegen import target_has_features
 
 
-@register_global_func("tvm.topi.x86.utils.get_simd_32bit_lanes")
+@register_global_func("tvm.topi.x86.utils.get_simd_32bit_lanes", override=True)
 def get_simd_32bit_lanes():
     """X86 SIMD optimal vector length lookup.
     Parameters

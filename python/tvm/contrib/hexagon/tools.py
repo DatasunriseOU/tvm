@@ -65,7 +65,7 @@ def register_linker(f):
     return register_global_func("tvm.contrib.hexagon.hexagon_link", f, True)
 
 
-@register_global_func("tvm.contrib.hexagon.hexagon_link")
+@register_global_func("tvm.contrib.hexagon.hexagon_link", override=True)
 def hexagon_link() -> str:
     """Return path to the Hexagon linker."""
     return str(HEXAGON_LINK_MAIN)
@@ -107,7 +107,7 @@ def toolchain_version(toolchain=None) -> list[int]:
     raise RuntimeError("Cannot establish toolchain version")
 
 
-@register_global_func("tvm.contrib.hexagon.link_shared")
+@register_global_func("tvm.contrib.hexagon.link_shared", override=True)
 def link_shared(so_name, objs, extra_args=None):
     """Link shared library on Hexagon using the registered Hexagon linker.
 

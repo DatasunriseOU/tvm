@@ -266,7 +266,7 @@ class LocalSession(RPCSession):
         RPCSession.__init__(self, _ffi_api.LocalSession())
 
 
-@tvm_ffi.register_global_func("rpc.PopenSession")
+@tvm_ffi.register_global_func("rpc.PopenSession", override=True)
 def _popen_session(binary):
     temp = utils.tempdir()
 

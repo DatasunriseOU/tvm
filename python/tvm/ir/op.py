@@ -183,7 +183,14 @@ def register_op_attr(op_name, attr_key, value=None, level=10):
 
     def _register(v):
         """internal register function"""
-        _ffi_api.RegisterOpAttr(op_name, attr_key, v, level)
+        try:
+            _ffi_api.RegisterOpAttr(op_name, attr_key, v, level)
+        except Exception as err:
+            if (
+                "already registered with same plevel" not in str(err)
+                or not _ffi_api.OpHasAttr(Op.get(op_name), attr_key)
+            ):
+                raise
         return v
 
     return _register(value) if value is not None else _register

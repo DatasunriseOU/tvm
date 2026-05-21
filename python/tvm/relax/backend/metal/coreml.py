@@ -464,7 +464,7 @@ class CodegenCoreML(PyExprVisitor):
         compile_coreml(model, self.model_name, out_dir)
 
 
-@tvm_ffi.register_global_func("relax.ext.coreml")
+@tvm_ffi.register_global_func("relax.ext.coreml", override=True)
 def coreml_compiler(funcs, options, constant_names):
     """
     Create a CoreML runtime from a Relax module.

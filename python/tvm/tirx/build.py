@@ -18,6 +18,8 @@
 # pylint: disable=invalid-name
 """The build utils in python."""
 
+from __future__ import annotations
+
 import tvm
 from tvm import ir
 from tvm.ir.module import IRModule
@@ -238,4 +240,4 @@ def build(
     return tir_to_runtime(host_mod, device_mod_dict, target_host)
 
 
-tvm.register_global_func("tirx.build", build)
+tvm.register_global_func("tirx.build", build, override=True)

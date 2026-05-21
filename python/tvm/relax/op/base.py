@@ -457,7 +457,7 @@ def render_object(val: tvm.Object) -> str:
     return str(val)
 
 
-@tvm.register_global_func("relax.run.shape_to_tensor")
+@tvm.register_global_func("relax.run.shape_to_tensor", override=True)
 def relax_shape_to_tensor(shape_tuple: tvm_ffi.Shape) -> tvm.runtime.Tensor:
     """
     Takes a Shape and convert it to Tensor.
@@ -470,7 +470,7 @@ def relax_shape_to_tensor(shape_tuple: tvm_ffi.Shape) -> tvm.runtime.Tensor:
     return tvm.runtime.tensor([int(v) for v in shape_tuple])
 
 
-@tvm.register_global_func("relax.run.print")
+@tvm.register_global_func("relax.run.print", override=True)
 def relax_print(format_str: str, *format_args: tvm.Object) -> None:
     """
     Takes a list of values to print, formats with the given format string.
@@ -518,7 +518,7 @@ def print(*values: list[Expr], format: str | Expr = "") -> Expr:
     return _ffi_api.print(values, format)  # type: ignore # pylint: disable=no-member
 
 
-@tvm.register_global_func("relax.run.assert_op")
+@tvm.register_global_func("relax.run.assert_op", override=True)
 def relax_assert_op(condition: tvm.Object, format_str: str, *format_args: tvm.Object) -> None:
     """
     A variadic function. The first value serves as the assertion condition:

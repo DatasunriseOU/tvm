@@ -238,7 +238,7 @@ def _worker_func(
     return artifact_path
 
 
-@register_global_func("s_tir.meta_schedule.builder.default_build")
+@register_global_func("s_tir.meta_schedule.builder.default_build", override=True)
 def default_build(mod: IRModule, target: Target, _params: dict[str, Tensor] | None) -> Module:
     """Default build function.
 
@@ -266,7 +266,7 @@ def default_build(mod: IRModule, target: Target, _params: dict[str, Tensor] | No
     return tvm_build(mod, target=target)
 
 
-@register_global_func("s_tir.meta_schedule.builder.default_export")
+@register_global_func("s_tir.meta_schedule.builder.default_export", override=True)
 def default_export(mod: Module) -> str:
     """Default export function.
 
@@ -287,7 +287,7 @@ def default_export(mod: Module) -> str:
     return artifact_path
 
 
-@register_global_func("s_tir.meta_schedule.builder.get_local_builder")
+@register_global_func("s_tir.meta_schedule.builder.get_local_builder", override=True)
 def get_local_builder() -> LocalBuilder:
     """Get the local builder.
 

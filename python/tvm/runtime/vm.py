@@ -472,6 +472,6 @@ class VirtualMachine:
         )
 
 
-@register_global_func("vm.builtin.debug_print")
+@register_global_func("vm.builtin.debug_print", override=True)
 def _print(lineo: str, array) -> None:
     print(f"{lineo}: shape = {array.shape}, dtype = {array.dtype}, data =\n{array}")

@@ -499,7 +499,7 @@ def get_max_tile_size() -> int:
     return max_tile_size
 
 
-@tvm.register_global_func("s_tir.meta_schedule.cuda.layout_transform")
+@tvm.register_global_func("s_tir.meta_schedule.cuda.layout_transform", override=True)
 def cuda_layout_transform_schedule_rule(
     sch: Schedule, block: SBlockRV, testing_tile_sizes: list[int] | None = None
 ) -> list[Schedule]:

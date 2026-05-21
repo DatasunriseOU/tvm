@@ -2109,7 +2109,7 @@ def all(*args, span=None):
     return val
 
 
-@tvm_ffi.register_global_func("tvm.default_trace_action")
+@tvm_ffi.register_global_func("tvm.default_trace_action", override=True)
 def _tvm_default_trace_action(*args):
     print(list(args))
 

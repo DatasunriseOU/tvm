@@ -206,7 +206,7 @@ class OriginalModule:
 def initializer() -> None:
     """Initializer function to register the functions on PopenWorker."""
 
-    @register_global_func("tvm.s_tir.meta_schedule.testing.default_check_metric")
+    @register_global_func("tvm.s_tir.meta_schedule.testing.default_check_metric", override=True)
     def default_check_metric(  # pylint: disable=unused-variable,unreachable-code
         lhs: list[tvm.runtime.Tensor], rhs: list[tvm.runtime.Tensor]
     ) -> bool:
@@ -232,7 +232,7 @@ def initializer() -> None:
         return True
 
 
-@register_global_func("tvm.s_tir.meta_schedule.testing.default_input_generator")
+@register_global_func("tvm.s_tir.meta_schedule.testing.default_input_generator", override=True)
 def default_input_generator(  # pylint: disable=unused-variable
     mod: IRModule,
 ) -> list[tvm.runtime.Tensor]:

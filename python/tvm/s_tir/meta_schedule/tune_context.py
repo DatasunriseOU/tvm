@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from .space_generator import SpaceGenerator
 
 
-@register_global_func("tvm.s_tir.meta_schedule.normalize_mod")
+@register_global_func("tvm.s_tir.meta_schedule.normalize_mod", override=True)
 def _normalize_mod(mod: PrimFunc | IRModule) -> IRModule:
     """Normalize the input to an IRModule"""
     if isinstance(mod, PrimFunc):

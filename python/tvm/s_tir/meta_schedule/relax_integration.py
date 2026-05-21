@@ -271,7 +271,7 @@ def tune_relax(
     )
 
 
-@register_global_func("tvm.s_tir.meta_schedule.tune_relax")
+@register_global_func("tvm.s_tir.meta_schedule.tune_relax", override=True)
 def _tune_relax(
     mod: Union[IRModule, "relax.Function"],
     params: dict[str, Tensor],
