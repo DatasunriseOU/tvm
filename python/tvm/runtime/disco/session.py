@@ -583,7 +583,7 @@ class ProcessSession(Session):
         func(config, os.getpid())
 
 
-@register_global_func("runtime.disco.create_socket_session_local_workers")
+@register_global_func("runtime.disco.create_socket_session_local_workers", override=True)
 def _create_socket_session_local_workers(num_workers) -> Session:
     """Create the local session for each distributed node over socket session."""
     return ProcessSession(num_workers)
@@ -611,7 +611,7 @@ class SocketSession(Session):
         )
 
 
-@register_global_func("runtime.disco._configure_structlog")
+@register_global_func("runtime.disco._configure_structlog", override=True)
 def _configure_structlog(pickled_config: bytes, parent_pid: int) -> None:
     """Configure structlog for all disco workers
 
@@ -646,7 +646,7 @@ def _configure_structlog(pickled_config: bytes, parent_pid: int) -> None:
     structlog.configure(**structlog_config)
 
 
-@register_global_func("runtime.disco._import_python_module")
+@register_global_func("runtime.disco._import_python_module", override=True)
 def _import_python_module(module_name: str) -> None:
     __import__(module_name)
 
