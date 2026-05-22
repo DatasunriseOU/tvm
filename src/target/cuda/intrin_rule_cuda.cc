@@ -142,6 +142,17 @@ static PrimExpr DispatchCUDAWarpActiveMask(const PrimExpr& e) {
   return Call(call->dtype, Op::Get("tirx.cuda.__activemask"), call->args);
 }
 
+static PrimExpr DispatchCUDAAtomicCAS(const PrimExpr& e) {
+  const CallNode* call = e.as<CallNode>();
+  TVM_FFI_ICHECK(call != nullptr);
+  TVM_FFI_ICHECK_EQ(call->args.size(), 3U);
+  ffi::Array<PrimExpr> cuda_args{StringImm("atomicCAS")};
+  for (const PrimExpr& arg : call->args) {
+    cuda_args.push_back(arg);
+  }
+  return Call(call->dtype, builtin::call_extern(), cuda_args);
+}
+
 template <typename T>
 static PrimExpr DispatchCUDAShuffle(const PrimExpr& e) {
   const CallNode* call = e.as<CallNode>();
@@ -238,6 +249,9 @@ TVM_REGISTER_OP("tirx.tvm_warp_activemask")
 
 TVM_REGISTER_OP("tirx.fmod")
     .set_attr<FLowerIntrinsic>("cuda.FLowerIntrinsic", DispatchPureExtern<CUDAMath>);
+
+TVM_REGISTER_OP("tirx.atomic_cas")
+    .set_attr<FLowerIntrinsic>("cuda.FLowerIntrinsic", DispatchCUDAAtomicCAS);
 
 // Register low-level builtin ops.
 // TODO(tvm-team): consider make CUDA its own subfolder and create a file for low-level builtins.

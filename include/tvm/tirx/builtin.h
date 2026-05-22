@@ -853,6 +853,18 @@ TVM_DLL const Op& dp4a();
  */
 TVM_DLL const Op& atomic_add();
 /*!
+ * \brief atomic compare-and-swap instruction.
+ *
+ *  Type atomic_cas(Type* ptr, Type expected, Type desired) {
+ *    Type old = *ptr;
+ *    if (old == expected) {
+ *      *ptr = desired;
+ *    }
+ *    return old;
+ *  }
+ */
+TVM_DLL const Op& atomic_cas();
+/*!
  * \brief Create an Nd memory allocation with storage scope
  */
 TVM_DLL const Op& nd_mem_alloc_with_scope();
