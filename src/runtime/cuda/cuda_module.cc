@@ -209,7 +209,7 @@ class CUDAWrappedFunc {
 
     if (fcache_[device_id] == nullptr) {
       fcache_[device_id] = m_->GetFunc(device_id, func_name_);
-      if (wl.dyn_shmem_size >= (48 << 10)) {
+      if (wl.dyn_shmem_size > 0) {
         // Assumption: dyn_shmem_size doesn't change across different invocations of
         // fcache_[device_id]
         CUresult result = cuFuncSetAttribute(
