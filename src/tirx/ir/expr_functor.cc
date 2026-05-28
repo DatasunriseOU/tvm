@@ -155,7 +155,15 @@ PrimExpr ExprMutator::VisitExpr_(const CallNode* op) {
   if (args.same_as(op->args)) {
     return ffi::GetRef<PrimExpr>(op);
   } else {
-    return Call(op->dtype, op->op, args);
+    // CPPMEGA: preserve annotations + span across sub-arg rewrites. The
+    // 4-arg Call ctor silently dropped them, which caused tile-op
+    // annotations (barrier, is_tma_copy, emit_arrive, ...) attached to
+    // e.g. tl.tileop.tma_copy calls to be erased by every ExprMutator-based
+    // pass (notably Simplify after InjectSoftwarePipeline), turning a
+    // pipelined TMA producer into a SIMT copy with no producer arrive while
+    // the WS-rewritten consumer still waited on the barrier — deadlock.
+    // Origin: tilelang test_pad_aligned_f16f16f16_nn on sm_121.
+    return Call(op->dtype, op->op, args, op->annotations, op->span);
   }
 }
 

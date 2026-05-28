@@ -179,20 +179,44 @@ void TIRVisitorWithPath::VisitStmt_(const BindNode* op, ffi::reflection::AccessP
 }
 
 void TIRVisitorWithPath::VisitStmt_(const AttrStmtNode* op, ffi::reflection::AccessPath path) {
-  Visit(op->value, path->Attr("value"));
-
+  // CPPMEGA: walk consecutive AttrStmt nodes iteratively rather than
+  // recursively. The original implementation opened a fresh lambda + bind
+  // scope per AttrStmt level via `bind_scope_.WithNewScope([&]{ Visit(body); })`,
+  // which blows the C stack on deeply-nested AttrStmt chains produced by
+  // tile-op MMA kernels (e.g. tilelang test_assert_tl_matmul_bfloat16 /
+  // test_assert_tl_matmul). The IterVar defs registered here are global
+  // (via in_scope_definitions_) and AttrStmt does NOT push into
+  // bind_scope_.Current() — only the terminal body's visit needs a fresh
+  // bind scope, so we open exactly one for the deepest body.
   std::vector<std::variant<DefContext<IterVar>, DefContext<Var>, DefContext<Buffer>>> context;
-  if (auto iter_var = op->node.as<IterVar>();
-      iter_var &&
-      (op->attr_key == attr::thread_extent || op->attr_key == s_tir::attr::virtual_thread)) {
-    // Some attributes serve as a source of definition for the
-    // tirx::Var they annotate.
-    context.push_back(WithDef(iter_var.value(), path->Attr("node")));
-
-  } else if (auto expr = op->node.as<PrimExpr>()) {
-    Visit(expr.value(), path->Attr("node"));
+  const AttrStmtNode* cur = op;
+  ffi::reflection::AccessPath cur_path = path;
+  while (true) {
+    Visit(cur->value, cur_path->Attr("value"));
+    if (auto iter_var = cur->node.as<IterVar>();
+        iter_var &&
+        (cur->attr_key == attr::thread_extent ||
+         cur->attr_key == s_tir::attr::virtual_thread)) {
+      // Some attributes serve as a source of definition for the
+      // tirx::Var they annotate.
+      context.push_back(WithDef(iter_var.value(), cur_path->Attr("node")));
+    } else if (auto expr = cur->node.as<PrimExpr>()) {
+      Visit(expr.value(), cur_path->Attr("node"));
+    }
+    // If the body is another AttrStmt, iterate; otherwise drop into a single
+    // new bind scope for the terminal body visit and stop.
+    if (const auto* next = cur->body.as<AttrStmtNode>()) {
+      cur = next;
+      cur_path = cur_path->Attr("body");
+      continue;
+    }
+    {
+      Stmt terminal_body = cur->body;
+      ffi::reflection::AccessPath terminal_path = cur_path->Attr("body");
+      bind_scope_.WithNewScope([&]() { Visit(terminal_body, terminal_path); });
+    }
+    break;
   }
-  bind_scope_.WithNewScope([&]() { Visit(op->body, path->Attr("body")); });
 
   while (context.size()) {
     context.pop_back();
