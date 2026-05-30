@@ -22,6 +22,7 @@
  */
 #include <tvm/ffi/function.h>
 #include <tvm/ffi/reflection/registry.h>
+#include <tvm/runtime/base.h>
 #include <tvm/runtime/logging.h>
 #include <tvm/runtime/timer.h>
 
@@ -467,7 +468,8 @@ void MetalThreadEntry::SetExternalCommandBuffer(int device_id,
   if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
     external_command_buffers_.resize(device_id + 1);
   }
-  external_command_buffers_[device_id] = ExternalCommandBufferState{command_buffer, nil, 0, nil, 0};
+  external_command_buffers_[device_id] =
+      ExternalCommandBufferState{command_buffer, nil, nil, 0, nil, 0};
 }
 
 void MetalThreadEntry::SetExternalCommandBufferWithEvents(int device_id,
@@ -480,7 +482,17 @@ void MetalThreadEntry::SetExternalCommandBufferWithEvents(int device_id,
     external_command_buffers_.resize(device_id + 1);
   }
   external_command_buffers_[device_id] =
-      ExternalCommandBufferState{command_buffer, wait_event, wait_value, signal_event, signal_value};
+      ExternalCommandBufferState{command_buffer, nil, wait_event, wait_value, signal_event,
+                                 signal_value};
+}
+
+void MetalThreadEntry::SetExternalComputeCommandEncoder(
+    int device_id, id<MTLComputeCommandEncoder> compute_encoder) {
+  if (external_command_buffers_.size() <= static_cast<size_t>(device_id)) {
+    external_command_buffers_.resize(device_id + 1);
+  }
+  external_command_buffers_[device_id] =
+      ExternalCommandBufferState{nil, compute_encoder, nil, 0, nil, 0};
 }
 
 void MetalThreadEntry::ClearExternalCommandBuffer(int device_id) {
@@ -508,6 +520,29 @@ MetalThreadEntry::ExternalCommandBufferState MetalThreadEntry::GetExternalComman
 MetalThreadEntry* MetalThreadEntry::ThreadLocal() {
   static thread_local MetalThreadEntry inst;
   return &inst;
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT void TVMMetalSetExternalCommandBufferDirect(
+    void* command_buffer) {
+  MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+  t->SetExternalCommandBuffer(t->device.device_id, (id<MTLCommandBuffer>)command_buffer);
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT void TVMMetalClearExternalCommandBufferDirect() {
+  MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+  t->ClearExternalCommandBuffer(t->device.device_id);
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT void TVMMetalSetExternalComputeEncoderDirect(
+    void* compute_encoder) {
+  MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+  t->SetExternalComputeCommandEncoder(
+      t->device.device_id, (id<MTLComputeCommandEncoder>)compute_encoder);
+}
+
+extern "C" TVM_RUNTIME_DLL_EXPORT void TVMMetalClearExternalComputeEncoderDirect() {
+  MetalThreadEntry* t = MetalThreadEntry::ThreadLocal();
+  t->ClearExternalCommandBuffer(t->device.device_id);
 }
 
 TVM_FFI_STATIC_INIT_BLOCK() {

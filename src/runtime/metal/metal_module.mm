@@ -129,6 +129,20 @@ class MetalModuleNode final : public ffi::ModuleObj {
       // opts = nil;
       // Per-kernel payload is bytes; treat as UTF-8 MSL source.
       std::string source_str(source.data(), source.size());
+      // Metal 4 cooperative-tensor (mpp::tensor_ops) kernels require MSL 4.0.
+      // The runtime JIT (newLibraryWithSource) -- used by the tvm_ffi backend --
+      // otherwise caps at MSL 2.3, which rejects the MPP header with
+      // "undeclared identifier 'mpp'".  This is the *only* language gate: the
+      // mpp ops run on Apple M4 (and presumably M3), not just M5.  Raise to
+      // MSL 4.0 when the kernel includes the MPP header and the OS/SDK support
+      // it.  (NB: register-heavy kernels can still fail pipeline-state creation
+      // with "exceeds available stack space" -- that is a separate occupancy
+      // limit, not a language-version or mpp-capability gate.)
+      if (source_str.find("MetalPerformancePrimitives") != std::string::npos) {
+        if (@available(macOS 26.0, iOS 26.0, *)) {
+          opts.languageVersion = MTLLanguageVersion4_0;
+        }
+      }
       lib = [w->devices[device_id]
           newLibraryWithSource:[NSString stringWithUTF8String:source_str.c_str()]
                        options:opts
