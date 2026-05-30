@@ -67,7 +67,8 @@ bool IsAArch32(ffi::Optional<ffi::String> mtriple, ffi::Optional<ffi::String> mc
 
 bool IsAArch64(ffi::Optional<ffi::String> mtriple) {
   if (mtriple) {
-    return support::StartsWith(mtriple.value(), "aarch64");
+    return support::StartsWith(mtriple.value(), "aarch64") ||
+           support::StartsWith(mtriple.value(), "arm64");
   }
   return false;
 }
@@ -101,8 +102,8 @@ static ffi::Map<ffi::String, ffi::Any> GetFeatures(ffi::Map<ffi::String, ffi::An
   ffi::Array<ffi::String> targets = llvm_backend.GetAllLLVMTargets();
   if ((IsAArch64(mtriple) && !CheckContains(targets, "aarch64")) ||
       (IsAArch32(mtriple, mcpu) && !CheckContains(targets, "arm"))) {
-    LOG(WARNING) << "Cannot parse target features for target: " << target
-                 << ". LLVM was not compiled with support for Arm(R)-based targets.";
+    DLOG(WARNING) << "Cannot parse target features for target: " << target
+                  << ". LLVM was not compiled with support for Arm(R)-based targets.";
     return {};
   }
 

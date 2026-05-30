@@ -61,6 +61,7 @@ enum class HoistedLetBindings : int {
 struct HoistExpressionConfigNode : public AttrsNodeReflAdapter<HoistExpressionConfigNode> {
   int hoisted_conditionals;
   int hoisted_let_bindings;
+  int max_hoisted_conditionals_per_scope;
 
   static void RegisterReflection() {
     namespace refl = tvm::ffi::reflection;
@@ -74,7 +75,14 @@ struct HoistExpressionConfigNode : public AttrsNodeReflAdapter<HoistExpressionCo
                 "Bitflags for the types of let bindings to hoist",
                 refl::DefaultValue(static_cast<int>(HoistedLetBindings::kRequiredByCondition) |
                                    static_cast<int>(HoistedLetBindings::kBind) |
-                                   static_cast<int>(HoistedLetBindings::kLetExpr)));
+                                   static_cast<int>(HoistedLetBindings::kLetExpr)))
+        .def_ro("max_hoisted_conditionals_per_scope",
+                &HoistExpressionConfigNode::max_hoisted_conditionals_per_scope,
+                "Maximum number of else-generating conditionals to hoist from a single loop "
+                "or thread scope. Negative values disable the guard. This bounds the "
+                "IfThenElse(cond, stmt, stmt) expansion that can otherwise duplicate large "
+                "post-flatten TIR bodies exponentially.",
+                refl::DefaultValue(8));
   }
 
   bool FlagSet(HoistedConditionals flag) const {
@@ -93,6 +101,7 @@ class HoistExpressionConfig : public Attrs {
     auto node = ffi::make_object<HoistExpressionConfigNode>();
     node->hoisted_conditionals = hoisted_conditionals;
     node->hoisted_let_bindings = hoisted_let_bindings;
+    node->max_hoisted_conditionals_per_scope = 8;
     data_ = std::move(node);
   }
   TVM_FFI_DEFINE_OBJECT_REF_METHODS_NOTNULLABLE(HoistExpressionConfig, Attrs,
@@ -465,6 +474,8 @@ class ExpressionHoister : public arith::IRMutatorWithAnalyzer {
                              HoistExpressionConfig config, arith::Analyzer* analyzer)
       : Parent(analyzer), config_(config) {
     for (auto& info : loop_info) {
+      bool hoist_conditionals = ShouldHoistConditionals(info, config);
+
       // Mark let bindings to use if they are enabled on their own.
       for (const auto& binding : info.let_bindings) {
         if (binding.IsEnabled(config)) {
@@ -473,7 +484,7 @@ class ExpressionHoister : public arith::IRMutatorWithAnalyzer {
       }
 
       // Or if they are required by a conditional
-      if (config->FlagSet(HoistedLetBindings::kRequiredByCondition)) {
+      if (hoist_conditionals && config->FlagSet(HoistedLetBindings::kRequiredByCondition)) {
         for (const auto& conditional : info.conditions) {
           if (conditional.IsEnabled(config)) {
             for (const auto& var : conditional.required_let_bindings) {
@@ -487,13 +498,35 @@ class ExpressionHoister : public arith::IRMutatorWithAnalyzer {
     }
   }
 
+  static bool ShouldHoistConditionals(const HoistInfoCollector::HoistInfo& info,
+                                      const HoistExpressionConfig& config) {
+    int max_hoisted_conditionals = config->max_hoisted_conditionals_per_scope;
+    if (max_hoisted_conditionals < 0) {
+      return true;
+    }
+
+    int enabled_else_generating_conditionals = 0;
+    for (const auto& conditional : info.conditions) {
+      if (!conditional.generate_else_case || !conditional.IsEnabled(config)) {
+        continue;
+      }
+      enabled_else_generating_conditionals++;
+      if (enabled_else_generating_conditionals > max_hoisted_conditionals) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   Stmt WrapHoistedStatements(Stmt stmt, const HoistInfoCollector::HoistInfo& info) {
-    for (auto cond_it = info.conditions.rbegin(); cond_it != info.conditions.rend(); cond_it++) {
-      if (cond_it->IsEnabled(config_)) {
-        if (cond_it->generate_else_case) {
-          stmt = IfThenElse(cond_it->condition, stmt, stmt);
-        } else {
-          stmt = IfThenElse(cond_it->condition, stmt);
+    if (ShouldHoistConditionals(info, config_)) {
+      for (auto cond_it = info.conditions.rbegin(); cond_it != info.conditions.rend(); cond_it++) {
+        if (cond_it->IsEnabled(config_)) {
+          if (cond_it->generate_else_case) {
+            stmt = IfThenElse(cond_it->condition, stmt, stmt);
+          } else {
+            stmt = IfThenElse(cond_it->condition, stmt);
+          }
         }
       }
     }

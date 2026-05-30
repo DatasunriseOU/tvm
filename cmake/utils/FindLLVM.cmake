@@ -146,7 +146,7 @@ macro(find_llvm use_llvm)
     string(REGEX REPLACE "^([^.]+)\.([^.])+\.[^.]+.*$" "\\1\\2" TVM_LLVM_VERSION ${__llvm_version})
     string(STRIP ${TVM_LLVM_VERSION} TVM_LLVM_VERSION)
     # definitions
-    string(REGEX MATCHALL "(^| )-D[A-Za-z0-9_]*" __llvm_defs ${__llvm_cxxflags})
+    string(REGEX MATCHALL "(^| )-D[A-Za-z0-9_]+(=[^ ]+)?" __llvm_defs ${__llvm_cxxflags})
     set(LLVM_DEFINITIONS "")
     foreach(__flag IN ITEMS ${__llvm_defs})
       string(STRIP "${__flag}" __llvm_def)

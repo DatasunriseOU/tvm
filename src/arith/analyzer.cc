@@ -26,6 +26,7 @@
 #include <tvm/ffi/reflection/registry.h>
 #include <tvm/runtime/logging.h>
 #include <tvm/tirx/expr.h>
+#include <tvm/tirx/expr_functor.h>
 #include <tvm/tirx/op.h>
 
 #include "./scalable_expression.h"
@@ -47,6 +48,57 @@ namespace {
 Analyzer::BindExprHook g_bind_expr_hook = nullptr;
 Analyzer::BindRangeHook g_bind_range_hook = nullptr;
 Analyzer::EnterConstraintHook g_enter_constraint_hook = nullptr;
+
+class Z3ConstraintSuitability final : public tirx::ExprVisitor {
+ public:
+  bool suitable{true};
+
+  void VisitExpr(const PrimExpr& expr) final {
+    if (!suitable || !expr.defined()) return;
+    if (++node_count_ > kMaxZ3ConstraintNodes) {
+      suitable = false;
+      return;
+    }
+    tirx::ExprVisitor::VisitExpr(expr);
+  }
+
+  void VisitExpr_(const tirx::BufferLoadNode* op) final {
+    (void)op;
+    suitable = false;
+  }
+
+  void VisitExpr_(const tirx::ProducerLoadNode* op) final {
+    (void)op;
+    suitable = false;
+  }
+
+  void VisitExpr_(const tirx::ReduceNode* op) final {
+    (void)op;
+    suitable = false;
+  }
+
+  void VisitExpr_(const tirx::CallNode* op) final {
+    (void)op;
+    suitable = false;
+  }
+
+ private:
+  static constexpr int kMaxZ3ConstraintNodes = 4096;
+  int node_count_{0};
+};
+
+bool ShouldForwardConstraintToZ3(const PrimExpr& constraint) {
+  if (!constraint.defined()) return false;
+  if (!(constraint.dtype().is_bool() || constraint.dtype().is_int() ||
+        constraint.dtype().is_uint()) ||
+      constraint.dtype().lanes() != 1) {
+    return false;
+  }
+
+  Z3ConstraintSuitability visitor;
+  visitor.VisitExpr(constraint);
+  return visitor.suitable;
+}
 }  // namespace
 
 void Analyzer::RegisterBindExprHook(BindExprHook hook) { g_bind_expr_hook = hook; }
@@ -154,7 +206,9 @@ std::function<void()> Analyzer::EnterConstraint(const PrimExpr& constraint) {
   recovery.push_back(this->int_set.EnterConstraint(constraint));
   recovery.push_back(this->transitive_comparisons.EnterConstraint(constraint));
   // CPPMEGA: forward to TileLang Z3Prover (if registered).
-  if (g_enter_constraint_hook) recovery.push_back(g_enter_constraint_hook(this, constraint));
+  if (g_enter_constraint_hook && ShouldForwardConstraintToZ3(constraint)) {
+    recovery.push_back(g_enter_constraint_hook(this, constraint));
+  }
   return [recovery = std::move(recovery)]() {
     for (auto it = recovery.rbegin(); it != recovery.rend(); ++it) {
       if (*it) (*it)();
@@ -171,7 +225,7 @@ void ConstraintContext::EnterWithScope() {
   recovery_functions_.push_back(analyzer_->int_set.EnterConstraint(constraint_));
   recovery_functions_.push_back(analyzer_->transitive_comparisons.EnterConstraint(constraint_));
   // CPPMEGA: forward to TileLang Z3Prover (if registered).
-  if (g_enter_constraint_hook) {
+  if (g_enter_constraint_hook && ShouldForwardConstraintToZ3(constraint_)) {
     recovery_functions_.push_back(g_enter_constraint_hook(analyzer_, constraint_));
   }
 }

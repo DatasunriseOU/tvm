@@ -309,7 +309,9 @@ LLVMTargetInfo::LLVMTargetInfo(LLVMInstance& instance,
 #if TVM_LLVM_VERSION < 220
   target_options_.UnsafeFPMath = false;
 #endif
+#if TVM_LLVM_VERSION < 230
   target_options_.NoInfsFPMath = false;
+#endif
   target_options_.NoNaNsFPMath = true;
   target_options_.FloatABIType = float_abi;
   if (target.find("mabi") != target.end()) {

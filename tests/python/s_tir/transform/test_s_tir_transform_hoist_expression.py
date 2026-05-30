@@ -22,16 +22,17 @@ from tvm.s_tir.transform import HoistedConditionals, HoistedLetBindings
 from tvm.script import tirx as T
 
 
-def _run_transform(before, hoisted_conditionals, hoisted_let_bindings):
+def _run_transform(before, hoisted_conditionals, hoisted_let_bindings, extra_config=None):
     """Run HoistExpression transform with the given configuration."""
     before_mod = tvm.IRModule.from_expr(before)
 
-    config = {
-        "s_tir.HoistExpression": {
-            "hoisted_conditionals": hoisted_conditionals.value,
-            "hoisted_let_bindings": hoisted_let_bindings.value,
-        }
+    hoist_config = {
+        "hoisted_conditionals": hoisted_conditionals.value,
+        "hoisted_let_bindings": hoisted_let_bindings.value,
     }
+    if extra_config:
+        hoist_config.update(extra_config)
+    config = {"s_tir.HoistExpression": hoist_config}
 
     with tvm.transform.PassContext(config=config):
         after_mod = tvm.s_tir.transform.HoistExpression()(before_mod)
@@ -505,6 +506,23 @@ def test_suppress_hoist_if_else_expr():
         before,
         HoistedConditionals.All & ~HoistedConditionals.IfElseExpr,
         HoistedLetBindings.All,
+    )
+    tvm.ir.assert_structural_equal(after, expected)
+
+
+def test_cap_suppresses_else_generating_condition_hoist():
+    @T.prim_func(private=True)
+    def before(A: T.Buffer((4, 4), "float32")):
+        for i, j in T.grid(4, 4):
+            A[i, j] = T.if_then_else(i < 2, 1.0, 2.0, dtype="float32")
+
+    expected = before
+
+    after = _run_transform(
+        before,
+        HoistedConditionals.All,
+        HoistedLetBindings.All,
+        extra_config={"max_hoisted_conditionals_per_scope": 0},
     )
     tvm.ir.assert_structural_equal(after, expected)
 
