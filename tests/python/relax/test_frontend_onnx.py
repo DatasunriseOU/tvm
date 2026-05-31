@@ -2289,6 +2289,104 @@ def test_layer_norm_with_nd_gamma_beta():
     check_correctness(model)
 
 
+def test_layer_norm_numerical_stability():
+    """Numerical stability test for https://github.com/apache/tvm/issues/19592."""
+    layer_norm_node = helper.make_node(
+        "LayerNormalization", ["input", "scale", "bias"], ["Y"], axis=-1, epsilon=1e-5
+    )
+    graph = helper.make_graph(
+        [layer_norm_node],
+        "layer_norm_numerical_stability",
+        inputs=[
+            helper.make_tensor_value_info("input", TensorProto.FLOAT, [1, 4]),
+            helper.make_tensor_value_info("scale", TensorProto.FLOAT, [4]),
+            helper.make_tensor_value_info("bias", TensorProto.FLOAT, [4]),
+        ],
+        outputs=[
+            helper.make_tensor_value_info("Y", TensorProto.FLOAT, [1, 4]),
+        ],
+    )
+    model = helper.make_model(graph, producer_name="layer_norm_numerical_stability")
+
+    input_array = np.array([[80000.0, 80001.0, 80002.0, 80003.0]], dtype=np.float32)
+    scale_array = np.ones(4, dtype=np.float32)
+    bias_array = np.zeros(4, dtype=np.float32)
+    inputs = {"input": input_array, "scale": scale_array, "bias": bias_array}
+
+    # ONNXRuntime also returns NaN for Large-value, small-variance inputs, so we here
+    # compare against a two-pass reference instead of ORT.
+    mean = input_array.mean(axis=-1, keepdims=True)
+    var = ((input_array - mean) ** 2).mean(axis=-1, keepdims=True)
+    expected = ((input_array - mean) / np.sqrt(var + 1e-5) * scale_array + bias_array).astype(
+        np.float32
+    )
+
+    tvm_output = run_in_tvm(model, inputs=inputs, ir_version=9, opset=17)
+
+    assert np.isfinite(tvm_output.numpy()).all()
+    tvm.testing.assert_allclose(tvm_output.numpy(), expected)
+
+
+def test_rms_norm():
+    # Basic test: default axis=-1
+    rms_norm_node = helper.make_node("RMSNormalization", ["input", "scale"], ["Y"], epsilon=1e-05)
+
+    graph = helper.make_graph(
+        [rms_norm_node],
+        "rms_norm_test",
+        inputs=[
+            helper.make_tensor_value_info("input", TensorProto.FLOAT, [2, 8, 32]),
+            helper.make_tensor_value_info("scale", TensorProto.FLOAT, [32]),
+        ],
+        outputs=[
+            helper.make_tensor_value_info("Y", TensorProto.FLOAT, [2, 8, 32]),
+        ],
+    )
+
+    model = helper.make_model(graph, producer_name="rms_norm_test")
+    check_correctness(model, opset=23)
+
+    # Test with explicit axis=1 (normalize over last 2 dims)
+    rms_norm_node = helper.make_node(
+        "RMSNormalization", ["input", "scale"], ["Y"], axis=1, epsilon=1e-06
+    )
+
+    graph = helper.make_graph(
+        [rms_norm_node],
+        "rms_norm_axis_test",
+        inputs=[
+            helper.make_tensor_value_info("input", TensorProto.FLOAT, [4, 8, 16]),
+            helper.make_tensor_value_info("scale", TensorProto.FLOAT, [8, 16]),
+        ],
+        outputs=[
+            helper.make_tensor_value_info("Y", TensorProto.FLOAT, [4, 8, 16]),
+        ],
+    )
+
+    model = helper.make_model(graph, producer_name="rms_norm_axis_test")
+    check_correctness(model, opset=23)
+
+    # Test with float16 input (stash_type=1 means compute in float32)
+    rms_norm_node = helper.make_node(
+        "RMSNormalization", ["input", "scale"], ["Y"], epsilon=1e-05, stash_type=1
+    )
+
+    graph = helper.make_graph(
+        [rms_norm_node],
+        "rms_norm_fp16_test",
+        inputs=[
+            helper.make_tensor_value_info("input", TensorProto.FLOAT16, [2, 8, 32]),
+            helper.make_tensor_value_info("scale", TensorProto.FLOAT16, [32]),
+        ],
+        outputs=[
+            helper.make_tensor_value_info("Y", TensorProto.FLOAT16, [2, 8, 32]),
+        ],
+    )
+
+    model = helper.make_model(graph, producer_name="rms_norm_fp16_test")
+    check_correctness(model, opset=23, rtol=1e-2, atol=1e-2)
+
+
 # TODO Enable dynamism
 @pytest.mark.parametrize("dynamic", [False])
 def test_skiplayernormalization(dynamic):
