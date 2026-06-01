@@ -20,6 +20,11 @@ from .registry import register_tag
 
 
 def _register_cuda_tag(name, arch, shared_mem=49152, regs=65536, **extra):
+    # NOTE: 49152 is the static-no-opt-in smem boundary kept for back-compat on
+    # all archs. Blackwell desktop/Spark parts (sm_120/sm_121, e.g. GB10) expose
+    # ~99 KB (101376 B) dynamic opt-in per block and are registered with an
+    # explicit shared_mem=101376 below. Do NOT raise this default globally: older
+    # archs (sm_20..sm_75) genuinely cap at 48 KB. See docs/GB10-SMEM-LIMIT.md.
     config = {
         "kind": "cuda",
         "keys": ["cuda", "gpu"],
@@ -180,9 +185,15 @@ _register_cuda_tag("nvidia/nvs-5200m", "sm_21", regs=32768)
 _register_cuda_tag("nvidia/nvs-4200m", "sm_21", regs=32768)
 
 # =====================================================================
-# GeForce RTX 50-series desktop
+# Blackwell desktop / Spark (sm_120 / sm_121): ~99 KB (101376 B) dynamic
+# shared-memory opt-in per block. See docs/GB10-SMEM-LIMIT.md.
 # =====================================================================
-_register_cuda_tag("nvidia/geforce-rtx-5060-ti", "sm_120", l2_cache_size_bytes=33554432)
+_register_cuda_tag(
+    "nvidia/geforce-rtx-5060-ti", "sm_120", shared_mem=101376, l2_cache_size_bytes=33554432
+)
+# NVIDIA GB10 (DGX Spark, sm_121): cudaDevAttrMaxSharedMemoryPerBlockOptin = 101376.
+_register_cuda_tag("nvidia/gb10", "sm_121a", shared_mem=101376)
+_register_cuda_tag("nvidia/nvidia-gb10", "sm_121a", shared_mem=101376)
 
 # =====================================================================
 # GeForce RTX 40-series desktop

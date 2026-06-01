@@ -366,7 +366,11 @@ def get_max_threads_per_block(target: Target) -> int:
 
 
 TARGET_KIND_TO_DEFAULT_MAX_SMEM = {
-    "cuda": 49152,
+    # sm_120/sm_121 (GB10/Blackwell) expose ~99 KB dynamic-opt-in per block
+    # (cudaDevAttrMaxSharedMemoryPerBlockOptin = 101376). The legacy 49152 is
+    # only the static-no-opt-in boundary; budgeting against it under-allocates
+    # tiles that need 50-99 KB on GB10. See docs/GB10-SMEM-LIMIT.md.
+    "cuda": 101376,
     "rocm": 65536,
     "metal": 32768,
     "opencl": 16384,
