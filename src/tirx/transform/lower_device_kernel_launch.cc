@@ -111,8 +111,23 @@ class DeviceInfoCollector : public StmtVisitor {
     // variables (e.g. CSE variables) can be inlined back to
     // expressions over function parameters.  Substitute earlier
     // bindings into the value to handle chains (cse_v2 = f(cse_v1)).
-    PrimExpr value = bind_map_.size() ? Substitute(op->value, bind_map_) : op->value;
-    bind_map_.Set(op->var, value);
+    //
+    // Only record scalar (non-pointer) bindings.  Launch geometry (thread
+    // extents and dynamic shared-memory sizes) is always integer/float scalar.
+    // Handle-typed binds in the MakePackedAPI host wrapper define buffer
+    // backing pointers (e.g. `arg_shape = tvm_struct_get(handle, ...)`, the
+    // DLTensor shape array).  A later scalar bind such as `seq = arg_shape[0]`
+    // is a BufferLoad whose backing-allocation Var is that handle.  If the
+    // handle binding were in `bind_map_`, Substitute would rewrite the buffer's
+    // `data` Var into the tvm_struct_get expression, and
+    // IRSubstitute::GetRemappedBuffer asserts the backing allocation must
+    // remain a Var (dynamic-symbolic-shape regression).  Pointer bindings are
+    // never part of launch geometry, so excluding them keeps symbolic-shape
+    // vars (loaded from the shape array) intact for the launch site.
+    if (!op->var.dtype().is_handle()) {
+      PrimExpr value = bind_map_.size() ? Substitute(op->value, bind_map_) : op->value;
+      bind_map_.Set(op->var, value);
+    }
     StmtVisitor::VisitStmt_(op);
   }
 
