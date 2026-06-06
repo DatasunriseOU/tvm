@@ -212,11 +212,37 @@ class CUDAWrappedFunc {
       if (wl.dyn_shmem_size > 0) {
         // Assumption: dyn_shmem_size doesn't change across different invocations of
         // fcache_[device_id]
+        // RULE#1 (no silent clamp): the driver's cuFuncSetAttribute failure for an
+        // oversized dynamic request is opaque ("Failed to set ... <N>") and hides WHY.
+        // The real ceiling is the per-block opt-in cap, and the kernel's STATIC smem is
+        // charged against the SAME budget — so a feasible-looking dynamic size can still
+        // be rejected because static+dynamic overflows. Query both and RAISE a clear,
+        // named-cap error (never clamp the request down to a silently-wrong value).
+        int static_smem = 0;
+        cuFuncGetAttribute(&static_smem, CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,
+                           fcache_[device_id]);
+        int optin_cap = 0;
+        cuDeviceGetAttribute(&optin_cap,
+                             CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN, device_id);
+        if (optin_cap > 0 &&
+            static_smem + static_cast<int>(wl.dyn_shmem_size) > optin_cap) {
+          TVM_FFI_THROW(InternalError)
+              << "Kernel '" << func_name_ << "' requires static=" << static_smem
+              << " + dynamic=" << wl.dyn_shmem_size << " = "
+              << (static_smem + static_cast<int>(wl.dyn_shmem_size))
+              << " B of shared memory, which exceeds the device per-block opt-in cap of "
+              << optin_cap << " B (CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN)."
+              << " Reduce the kernel's static __shared__ staging or dynamic shared buffer"
+              << " so static+dynamic fits under the cap. (No silent clamp: RULE#1 fail-fast.)";
+        }
         CUresult result = cuFuncSetAttribute(
             fcache_[device_id], CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES, wl.dyn_shmem_size);
         if (result != CUDA_SUCCESS) {
           TVM_FFI_THROW(InternalError)
-              << "Failed to set the allowed dynamic shared memory size to " << wl.dyn_shmem_size;
+              << "Failed to set the allowed dynamic shared memory size to " << wl.dyn_shmem_size
+              << " for kernel '" << func_name_ << "' (static=" << static_smem
+              << ", device opt-in cap=" << optin_cap << " B). The driver rejected the request;"
+              << " this usually means static+dynamic exceeds the per-block opt-in budget.";
         }
       }
     }
