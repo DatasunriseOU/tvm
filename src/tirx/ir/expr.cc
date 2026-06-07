@@ -626,7 +626,8 @@ TVM_FFI_STATIC_INIT_BLOCK() {
       "tirx.Call",
       [](ffi::Optional<DataType> dtype, RelaxExpr op,
          ffi::Array<ffi::Variant<ffi::String, DLDataType, IterVar, BufferRegion, PrimExpr>> args,
-         Span span) {
+         Span span,
+         ffi::Optional<ffi::Map<ffi::String, ffi::ObjectRef>> annotations) {
         ffi::Array<PrimExpr> prim_expr_args;
         for (const auto& it : args) {
           if (auto opt_str = it.as<ffi::String>()) {
@@ -651,6 +652,15 @@ TVM_FFI_STATIC_INIT_BLOCK() {
           } else {
             prim_expr_args.push_back(Downcast<PrimExpr>(it));
           }
+        }
+        // CPPMEGA: restore the per-Call annotations channel. When the Python
+        // caller passes annotations (e.g. disable_tma / coalesced_width on
+        // tl.tileop.copy), route through the 5-arg CallNode ctor so the
+        // annotations survive to op lowering (Copy::Lower reads them). When
+        // absent, keep the 4-arg ctor (empty annotations map) unchanged.
+        if (annotations.has_value()) {
+          return Call(dtype.value_or(DataType::Void()), op, prim_expr_args,
+                      annotations.value(), span);
         }
         return Call(dtype.value_or(DataType::Void()), op, prim_expr_args, span);
       });

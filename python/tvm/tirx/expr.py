@@ -1302,7 +1302,12 @@ class Call(PrimExprWithOp):
     args: list[PrimExpr]
 
     def __init__(
-        self, dtype: str, op: Op | str, args: list[PrimExpr], span: Span | None = None
+        self,
+        dtype: str,
+        op: Op | str,
+        args: list[PrimExpr],
+        span: Span | None = None,
+        annotations: dict | None = None,
     ) -> None:
         if isinstance(op, str):
             # CPPMEGA: rewrite legacy ``tir.*`` intrinsic names to the new
@@ -1324,7 +1329,29 @@ class Call(PrimExprWithOp):
                     % op
                 )
             op = Op.get(op)
-        self.__init_handle_by_constructor__(_ffi_api.Call, dtype, op, args, span)  # type: ignore
+        # CPPMEGA: thread per-Call annotations (e.g. disable_tma / coalesced_width
+        # on tl.tileop.copy) through to the 5-arg CallNode ctor. When None, the
+        # FFI factory takes the 4-arg path (empty annotations), preserving the
+        # historical behavior for every other call site.
+        #
+        # The CallNode::annotations Map value type is ffi::ObjectRef, so raw
+        # Python scalars must be wrapped first. The C++ readers (Copy::Lower's
+        # GetBoolAnnotation / GetEvictionPolicy) expect IntImmNode, so bool/int
+        # values are wrapped as IntImm; already-FFI objects (Fragment layouts,
+        # BufferLoad barriers, ...) pass through untouched.
+        if annotations is not None:
+            norm: dict = {}
+            for key, val in annotations.items():
+                if isinstance(val, bool):
+                    norm[key] = IntImm("int32", 1 if val else 0)
+                elif isinstance(val, int):
+                    norm[key] = IntImm("int32", val)
+                else:
+                    norm[key] = val
+            annotations = norm
+        self.__init_handle_by_constructor__(
+            _ffi_api.Call, dtype, op, args, span, annotations
+        )  # type: ignore
 
 
 @tvm_ffi.register_object("tirx.Let")

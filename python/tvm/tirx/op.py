@@ -182,21 +182,21 @@ def call_intrin(dtype, func_name, *args, span=None, annotations=None, **kwargs):
         The location of this operator in the source code.
 
     annotations : Optional[Mapping]
-        CPPMEGA: re-accepted kwarg dropped from apache/tvm latest. Currently
-        ignored on the Python side (the apache 4-arg Call FFI ctor doesn't
-        accept it). The C++ ``tirx::CallNode`` field is preserved via the
-        ``3rdparty/tvm/include/tvm/tirx/expr.h`` patch for direct C++ callers.
+        CPPMEGA: per-Call annotations channel (RESTORED). Threaded through to the
+        ``tirx::CallNode::annotations`` field via the 5-arg Call ctor so op
+        lowering (e.g. Copy::Lower reading ``disable_tma`` / ``coalesced_width``
+        on ``tl.tileop.copy``) sees them. When None, the historical 4-arg Call
+        path is used unchanged.
 
     Returns
     -------
     call : PrimExpr
         The call expression.
     """
-    # CPPMEGA: silently accept and drop ``annotations`` / extra kwargs so that
-    # TileLang call sites (tilelang/language/tir/op.py) keep working after
-    # apache/tvm dropped the kwarg from the Python wrapper.
-    del annotations, kwargs
-    return Call(dtype, func_name, args, span)
+    # CPPMEGA: drop only unexpected extra kwargs; ``annotations`` is a real
+    # channel and must survive to the CallNode (see Call.__init__).
+    del kwargs
+    return Call(dtype, func_name, args, span, annotations=annotations)
 
 
 def call_pure_extern(dtype, func_name, *args, span=None):
