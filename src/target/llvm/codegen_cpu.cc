@@ -1074,7 +1074,20 @@ llvm::Value* CodeGenCPU::CreateIntrinsic(const CallNode* op) {
       if (type == "shape") {
         return builder_->CreateAlloca(t_tvm_shape_index_, num);
       } else if (type == "tvm_ffi_any") {
-        return builder_->CreateAlloca(t_tvm_ffi_any_, num);
+        // TMA descriptors (CUtensorMap) are materialized through the
+        // tvm_ffi_any packed-arg stack slots before being handed to
+        // __tvm_tensormap_create_tiled, whose CUDA-driver contract REQUIRES a
+        // 64-byte-aligned descriptor address. The natural alignment of
+        // TVMFFIAny (8) leaves the descriptor at mod64 != 0 and the runtime
+        // validator FATALs ("tensorMap address must be 64-byte aligned").
+        // Mirror the dedicated `tensormap` branch below (and the C-host
+        // codegen_c_host.cc aligned(64) attribute) by pinning this stack alloca
+        // to 64 bytes so the descriptor address is provably aligned. RULE #1:
+        // this is the correct-path fix (raise alignment to the hardware
+        // contract), not a fallback.
+        auto* alloca = builder_->CreateAlloca(t_tvm_ffi_any_, num);
+        alloca->setAlignment(llvm::Align(64));
+        return alloca;
       } else if (type == "array") {
         return builder_->CreateAlloca(t_tvm_array_, num);
       } else if (type == "tensormap") {
