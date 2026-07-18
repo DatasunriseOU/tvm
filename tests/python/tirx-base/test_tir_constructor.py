@@ -183,6 +183,17 @@ def test_stmt_constructor():
     assert x.else_case == nop
 
 
+def test_attr_stmt_none_preserves_none_for_purity_analysis():
+    body = tvm.tirx.AttrStmt(
+        None, "threadblock_swizzle_pattern", 0, tvm.tirx.Evaluate(0)
+    )
+    assert body.node is None
+    func = tvm.tirx.PrimFunc([], body)
+    from tvm.s_tir.analysis import is_pure_function
+
+    assert is_pure_function(func)
+
+
 def test_float_constructor_requires_float_dtype():
     with pytest.raises(tvm.TVMError):
         tvm.tirx.FloatImm("int32", 1.0)
