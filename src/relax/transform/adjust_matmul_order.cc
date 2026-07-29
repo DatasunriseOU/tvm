@@ -169,17 +169,17 @@ std::tuple<DFPattern, ffi::TypedFunction<Expr(Expr, ffi::Map<DFPattern, Expr>)>>
       size_t ndim = opt_shape.value().size();
       TVM_FFI_ICHECK_GE(ndim, 2);
 
-      ffi::Optional<ffi::Array<int64_t>> axes;
+      ffi::Optional<ffi::Array<Integer>> axes;
 
       if (ndim == 2) {
         // Pass none axes to permute_dims for simple transpose of 2D tensors.
         axes = std::nullopt;
       } else {
-        ffi::Array<int64_t> axes_array;
-        for (size_t i = 0; i < ndim; ++i) axes_array.push_back(i);
-        axes_array.Set(ndim - 1, ndim - 2);
-        axes_array.Set(ndim - 2, ndim - 1);
-        axes = ffi::Optional<ffi::Array<int64_t>>(axes_array);
+        ffi::Array<Integer> axes_array;
+        for (size_t i = 0; i < ndim; ++i) axes_array.push_back(static_cast<int>(i));
+        axes_array.Set(ndim - 1, static_cast<int>(ndim - 2));
+        axes_array.Set(ndim - 2, static_cast<int>(ndim - 1));
+        axes = ffi::Optional<ffi::Array<Integer>>(axes_array);
       }
       return permute_dims(std::move(expr), axes);
     };
