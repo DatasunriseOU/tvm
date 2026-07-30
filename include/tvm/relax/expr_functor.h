@@ -380,9 +380,9 @@ class ExprMutatorBase : public ExprFunctor<Expr(const Expr&)> {
    *       If change is detected, the implementation can generate a fresh
    *       node without struct_info, and trigger normalizer to re-derive.
    */
-  bool VisitAndCheckStructInfoFieldUnchanged(const ffi::ObjectRef& struct_info) {
+  bool VisitAndCheckStructInfoFieldUnchanged(const ffi::Optional<ffi::ObjectRef>& struct_info) {
     if (const StructInfoNode* sinfo = struct_info.as<StructInfoNode>()) {
-      return this->VisitExprDepStructInfoField(ffi::GetRef<StructInfo>(sinfo)).same_as(struct_info);
+      return struct_info.same_as(this->VisitExprDepStructInfoField(ffi::GetRef<StructInfo>(sinfo)));
     } else {
       return true;
     }

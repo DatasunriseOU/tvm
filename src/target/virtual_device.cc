@@ -22,6 +22,7 @@
  * \brief A compile time representation for where data is to be stored at runtime, and how to
  * compile code to compute it.
  */
+#include <tvm/ffi/device.h>
 #include <tvm/ffi/reflection/registry.h>
 #include <tvm/runtime/device_api.h>
 #include <tvm/target/virtual_device.h>

@@ -1144,8 +1144,10 @@ IndexMap LegalizeIndexMapDType(const IndexMap& index_map, const ffi::Array<PrimE
                                                   [&](const Var& var) { return var_map.Get(var); });
       }
     });
-    ffi::Optional<IndexMap> opt_inverse_index_map =
-        Downcast<ffi::Optional<IndexMap>>(index_map->inverse_index_map);
+    ffi::Optional<IndexMap> opt_inverse_index_map = std::nullopt;
+    if (index_map->inverse_index_map.has_value()) {
+      opt_inverse_index_map = index_map->inverse_index_map.value().as_or_throw<IndexMap>();
+    }
     if (opt_inverse_index_map.defined()) {
       opt_inverse_index_map = LegalizeIndexMapDType(opt_inverse_index_map.value(), final_indices);
     }

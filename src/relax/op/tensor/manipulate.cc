@@ -262,7 +262,7 @@ StructInfo InferStructInfoConcat(const Call& call, const BlockBuilder& ctx) {
           vdev = sinfo->vdevice.value();
         } else if (sinfo->vdevice.value()->target.defined()) {
           // mismatch
-          if (sinfo->vdevice.value() != vdev) {
+          if (sinfo->vdevice.value() != vdev.value()) {
             vdevice_unknown = true;
           }
         }
@@ -947,7 +947,8 @@ Expr ConvertNewShapeToExpr(const Expr& data,
     }
   }
 
-  ffi::Array<PrimExpr> array_ref = ffi::GetRef<ffi::Array<PrimExpr>>(array);
+  ffi::Array<PrimExpr> array_ref =
+      ffi::GetRef<ffi::ObjectRef>(array).as_or_throw<ffi::Array<PrimExpr>>();
   // When there is no dimension to infer, just return the input array as ShapeExpr.
   if (dim_to_infer == -1 && zero_dims.empty()) {
     return ShapeExpr(array_ref);
@@ -1075,7 +1076,8 @@ Expr split(Expr x, ffi::Variant<IntImm, ffi::Array<IntImm>> indices_or_sections,
              "However, the given indices "
           << indices_or_sections << " contains some non-integer.";
     }
-    indices_or_sections_obj = ConvertIntImmToInt64(ffi::GetRef<ffi::Array<IntImm>>(indices));
+    indices_or_sections_obj = ConvertIntImmToInt64(
+        ffi::GetRef<ffi::ObjectRef>(indices).as_or_throw<ffi::Array<IntImm>>());
   } else if (const auto* n_section = indices_or_sections.as<IntImmNode>()) {
     TVM_FFI_ICHECK_GT(n_section->value, 0)
         << "Split op expects the input number of sections to be a "
@@ -1540,7 +1542,7 @@ StructInfo InferStructInfoStack(const Call& call, const BlockBuilder& ctx) {
       if (sinfo->vdevice.defined()) {
         if (!vdev.defined()) {
           vdev = sinfo->vdevice.value();
-        } else if (sinfo->vdevice.value() != vdev) {
+        } else if (sinfo->vdevice.value() != vdev.value()) {
           vdevice_unknown = true;
         }
       }
@@ -2508,7 +2510,7 @@ StructInfo InferStructInfoMeshgrid(const Call& call, const BlockBuilder& ctx) {
       if (sinfo->vdevice.defined()) {
         if (!vdev.defined()) {
           vdev = sinfo->vdevice.value();
-        } else if (sinfo->vdevice.value() != vdev) {
+        } else if (sinfo->vdevice.value() != vdev.value()) {
           vdevice_unknown = true;
         }
       }

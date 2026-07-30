@@ -750,7 +750,7 @@ Var ExprMutator::VisitVarDef_(const DataflowVarNode* var) {
 Var ExprMutator::VisitVarDef_(const VarNode* var) {
   if (auto* sinfo = var->struct_info_.as<StructInfoNode>()) {
     StructInfo struct_info = this->VisitExprDepStructInfoField(ffi::GetRef<StructInfo>(sinfo));
-    if (struct_info.same_as(var->struct_info_)) {
+    if (var->struct_info_.same_as(struct_info)) {
       return ffi::GetRef<Var>(var);
     } else {
       return Var(var->vid, struct_info, var->span);

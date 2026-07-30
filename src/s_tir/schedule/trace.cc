@@ -401,8 +401,8 @@ void Trace::ApplyJSONToSchedule(ffi::ObjectRef json, Schedule sch) {
     const auto* arr0 = arr->at(0).as<ffi::ArrayObj>();
     const auto* arr1 = arr->at(1).as<ffi::ArrayObj>();
     TVM_FFI_ICHECK(arr0 && arr1);
-    json_insts = ffi::GetRef<ffi::Array<Any>>(arr0);
-    json_decisions = ffi::GetRef<ffi::Array<Any>>(arr1);
+    json_insts = ffi::GetRef<ffi::ObjectRef>(arr0).as_or_throw<ffi::Array<Any>>();
+    json_decisions = ffi::GetRef<ffi::ObjectRef>(arr1).as_or_throw<ffi::Array<Any>>();
   } catch (const tvm::ffi::Error& e) {
     TVM_FFI_THROW(ValueError) << "The json entry of a trace should contain two arrays, an array of "
                                  "instructions and an array of decisions, but gets: "

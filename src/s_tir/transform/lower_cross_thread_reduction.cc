@@ -254,8 +254,8 @@ class InThreadReducerMaker : private StmtMutator {
   }
 
   Stmt VisitStmt_(const ForNode* loop) final {
-    if (ffi::Optional<For> opt_res = Downcast<ffi::Optional<For>>(StmtMutator::VisitStmt_(loop))) {
-      For res = opt_res.value();
+    if (std::optional<For> opt_res = StmtMutator::VisitStmt_(loop).as<For>()) {
+      For res = *opt_res;
       if (res->thread_binding.defined()) {
         UnderLoopReductionBlockVarCollector collector;
         if (!res->body.defined() || collector.CheckHasReductionBlocks(res)) {

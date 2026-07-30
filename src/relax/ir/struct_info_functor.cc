@@ -78,7 +78,7 @@ StructInfo StructInfoMutator::VisitStructInfo_(const PrimStructInfoNode* op) {
   }
 
   auto new_expr = VisitStructInfoExprField(op->value.value());
-  if (new_expr.same_as(op->value)) {
+  if (op->value.same_as(new_expr)) {
     return ffi::GetRef<StructInfo>(op);
   } else {
     return PrimStructInfo(new_expr);

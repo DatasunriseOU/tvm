@@ -1017,7 +1017,7 @@ class PatternMatchingMutator : public ExprMutator {
 
         auto last_binding = last_block->bindings.back();
         last_block.CopyOnWrite()->bindings.pop_back();
-        TVM_FFI_ICHECK(last_binding->var.same_as(dummy_output_var));
+        TVM_FFI_ICHECK(dummy_output_var.same_as(last_binding->var));
 
         if (last_block->bindings.size()) {
           new_blocks.push_back(last_block);
