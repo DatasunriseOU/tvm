@@ -48,25 +48,4 @@ TVM_DLL void Dump(const ffi::Object* node);
 
 }  // namespace tvm
 
-namespace tvm {
-namespace ffi {
-
-// ostream << ObjectRef  — delegates to ffi::ReprPrint
-inline std::ostream& operator<<(std::ostream& os, const ObjectRef& n) {  // NOLINT(*)
-  return os << ffi::ReprPrint(Any(n));
-}
-
-// ostream << Any — delegates to ffi::ReprPrint
-inline std::ostream& operator<<(std::ostream& os, const Any& n) {  // NOLINT(*)
-  return os << ffi::ReprPrint(n);
-}
-
-// ostream << Variant<...> — delegates to ffi::ReprPrint
-template <typename... V>
-inline std::ostream& operator<<(std::ostream& os, const ffi::Variant<V...>& n) {  // NOLINT(*)
-  return os << ffi::ReprPrint(Any(n));
-}
-
-}  // namespace ffi
-}  // namespace tvm
 #endif  // TVM_IR_REPR_H_
