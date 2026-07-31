@@ -137,9 +137,9 @@ class FuncBuilder : public ExprMutator {
     }
     // Set up the parameters
     for (const auto* input : inputs_) {
-      auto new_var = Var(input->name_hint(),
-                         VisitExprDepStructInfoField(
-                             Downcast<ffi::Optional<StructInfo>>(input->struct_info_).value()));
+      auto new_var =
+          Var(input->name_hint(),
+              VisitExprDepStructInfoField(input->struct_info_.value().as_or_throw<StructInfo>()));
       var_remap_[input->vid] = new_var;
       params.push_back(new_var);
     }

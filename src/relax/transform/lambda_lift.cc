@@ -274,7 +274,7 @@ class LambdaLifter : public ExprMutator {
     bool is_recursive = false;
     bool is_closure = false;
     for (const auto& var : FreeVars(func)) {
-      if (var.same_as(current_lambda_var_)) {
+      if (current_lambda_var_.same_as(var)) {
         is_recursive = true;
       } else {
         is_closure = true;

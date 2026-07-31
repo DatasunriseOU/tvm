@@ -361,7 +361,7 @@ class WellFormedChecker : public relax::ExprVisitor,
             << "However, normalization of " << before_normalize << " resulted in the error: \n"
             << err.what());
       }
-      if (after_normalize && !before_normalize.same_as(after_normalize)) {
+      if (after_normalize && !after_normalize.same_as(before_normalize)) {
         Malformed(
             Diagnostic::Error(call)
             << "If an operator defines an operator-specific normalization function (FNormalize), "

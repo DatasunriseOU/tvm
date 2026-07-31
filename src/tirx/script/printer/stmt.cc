@@ -170,7 +170,7 @@ TVM_STATIC_IR_FUNCTOR(IRDocsifier, vtable)
             then_branch = (*f)->stmts;
           }
           if (stmt->else_case.defined()) {
-            With<TIRFrame> f(d, stmt->else_case);
+            With<TIRFrame> f(d, stmt->else_case.value());
             AsDocBody(stmt->else_case.value(), p->Attr("else_case"), f->get(), d);
             else_branch = (*f)->stmts;
           }
