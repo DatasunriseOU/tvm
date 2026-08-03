@@ -200,7 +200,7 @@ void TIRVisitorWithPath::VisitStmt_(const AttrStmtNode* op, ffi::reflection::Acc
       // Some attributes serve as a source of definition for the
       // tirx::Var they annotate.
       context.push_back(WithDef(iter_var.value(), cur_path->Attr("node")));
-    } else if (auto expr = cur->node.as<PrimExpr>()) {
+    } else if (auto expr = cur->node.as<PrimExpr>(); expr && expr.value().defined()) {
       Visit(expr.value(), cur_path->Attr("node"));
     }
     // If the body is another AttrStmt, iterate; otherwise drop into a single
