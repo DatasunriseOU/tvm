@@ -89,6 +89,9 @@ using ffi::Any;
 using ffi::Function;
 using ffi::PackedArgs;
 
+std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler> CreateTMOwningSimpleCompilerWithoutRtti(
+    std::unique_ptr<llvm::TargetMachine> target_machine);
+
 class LLVMModuleNode final : public ffi::ModuleObj {
  public:
   ~LLVMModuleNode();
@@ -479,7 +482,7 @@ void LLVMModuleNode::InitORCJIT() {
   // compiler
   const auto compilerBuilder = [&](const llvm::orc::JITTargetMachineBuilder&)
       -> llvm::Expected<std::unique_ptr<llvm::orc::IRCompileLayer::IRCompiler>> {
-    return std::make_unique<llvm::orc::TMOwningSimpleCompiler>(std::move(tm));
+    return CreateTMOwningSimpleCompilerWithoutRtti(std::move(tm));
   };
 
   // linker

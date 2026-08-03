@@ -51,7 +51,17 @@ if(NOT ${USE_LLVM} MATCHES ${IS_FALSE_PATTERN})
   list(APPEND TVM_LINKER_LIBS ${LLVM_LIBS})
   list(APPEND COMPILER_SRCS ${COMPILER_LLVM_SRCS})
   if(NOT MSVC)
-    set_source_files_properties(${COMPILER_LLVM_SRCS}
-      PROPERTIES COMPILE_FLAGS "-fno-rtti")
+    if(USE_RTTI)
+      # LLVM may itself be built without RTTI.  Keep the one construction that
+      # derives from an LLVM class in a small RTTI-free translation unit, while
+      # preserving external exception RTTI in the rest of libtvm_compiler.
+      get_filename_component(TVM_LLVM_NO_RTTI_SRC
+        "${CMAKE_CURRENT_LIST_DIR}/../../src/target/llvm/llvm_module_no_rtti.cc" ABSOLUTE)
+      set_source_files_properties(${TVM_LLVM_NO_RTTI_SRC}
+        PROPERTIES COMPILE_FLAGS "-fno-rtti")
+    else()
+      set_source_files_properties(${COMPILER_LLVM_SRCS}
+        PROPERTIES COMPILE_FLAGS "-fno-rtti")
+    endif()
   endif()
 endif()
