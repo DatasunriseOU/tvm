@@ -184,9 +184,7 @@ def test_stmt_constructor():
 
 
 def test_attr_stmt_none_preserves_none_for_purity_analysis():
-    body = tvm.tirx.AttrStmt(
-        None, "threadblock_swizzle_pattern", 0, tvm.tirx.Evaluate(0)
-    )
+    body = tvm.tirx.AttrStmt(None, "threadblock_swizzle_pattern", 0, tvm.tirx.Evaluate(0))
     assert body.node is None
     func = tvm.tirx.PrimFunc([], body)
     from tvm.s_tir.analysis import is_pure_function
